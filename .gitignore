@@ -11,6 +11,7 @@ Audio/
 Videos/
 test_problem_links.txt
 test_links.txt
+error_log.txt
 
 # FFmpeg binary (downloaded automatically by the script)
 ffmpeg.exe

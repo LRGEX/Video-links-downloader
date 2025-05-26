@@ -1,3 +1,19 @@
+"""
+YouTube Video/Audio Downloader Script v3.7 (Complete Single File with Auto-Cleanup)
+=========================================
+Enhanced anti-bot detection for YouTube with improved MEGA.nz support
+
+Features:
+- Multi-strategy anti-bot detection (5 fallback methods) ✅ WORKING
+- Browser cookie extraction (Chrome/Firefox/Edge) ✅ WORKING
+- MEGA.nz file download with automatic browser fallback 🔄 IMPROVED
+- Automatic file organization (MP4 videos, MP3 audio) ✅ WORKING
+- Robust error handling and logging ✅ WORKING
+- Automatic cleanup of misplaced audio files ✅ NEW
+
+Dependencies: yt-dlp, requests, mega.py
+"""
+
 import os
 import urllib.request
 import zipfile
@@ -8,15 +24,19 @@ import re
 import shutil
 import time
 import requests
+import tempfile
+import gc
+import webbrowser
 from urllib.parse import urlparse
 
-# Try to import MEGA support, handle gracefully if not available
+# MEGA support using official mega.py library (Python 3.10 compatible)
 try:
     from mega import Mega
     MEGA_AVAILABLE = True
+    print("✓ MEGA.py library available")
 except ImportError:
     MEGA_AVAILABLE = False
-    print("Warning: MEGA support not available. Install with: uv add mega.py")
+    print("⚠ Warning: MEGA support not available. Install with: pip install mega.py")
 
 def sanitize_filename(filename):
     """Sanitize filenames by removing or replacing invalid characters."""
@@ -192,18 +212,27 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
     # Ensure FFmpeg is available
     ffmpeg_path = get_ffmpeg_path()
     
+    # Clean up any misplaced audio files BEFORE processing new downloads
+    cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path)
+    
     # Read the list of links
     with open(links_file, "r", encoding="utf-8") as file:
         links = file.readlines()
     
-    for i, link in enumerate(links, 1):
+    # Remove duplicates and track processed links
+    raw_links = [link.strip() for link in links if link.strip()]
+    unique_links, duplicates = detect_duplicates_simple(raw_links)
+    
+    if duplicates:
+        print(f"\n🔍 Found and skipped {len(duplicates)} duplicate link(s)")
+        print(f"📊 Processing {len(unique_links)} unique links out of {len(raw_links)} total links\n")
+    
+    for i, link in enumerate(unique_links, 1):
         link = link.strip()
-        if not link:
-            continue
         
         # Clean YouTube link by removing extra parameters
         sanitized_link = sanitize_youtube_link(link)
-        print(f"\nProcessing ({i}/{len(links)}): {sanitized_link}")
+        print(f"\nProcessing ({i}/{len(unique_links)}): {sanitized_link}")
         
         try:
             # Check if it's a MEGA link
@@ -211,8 +240,7 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
                 download_mega_file(sanitized_link, video_folder, audio_folder, ffmpeg_path)
             else:
                 download_video(sanitized_link, video_folder, audio_folder, ffmpeg_path)
-            
-            # Small delay between downloads to be respectful to servers
+              # Small delay between downloads to be respectful to servers
             time.sleep(1)
         except Exception as e:
             reason = str(e).split("\n")[0]
@@ -223,6 +251,9 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
             )
             print(f"Failed to process {sanitized_link}: {reason}")
             continue
+
+    # Final cleanup after all downloads
+    cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path)
 
     if failed_links:
         with open(log_file, "w", encoding="utf-8") as log:
@@ -328,104 +359,284 @@ def display_ascii_logo():
  / /___/ _, _/ /_/ / /___ /   |  
 /_____/_/ |_|\____/_____//_/|_| 
                                 
-YouTube Downloader - v3.0 (Anti-Bot Enhanced)
+YouTube Downloader - v3.7 (Mega Support + Autobot Detection)
     """)
     print("=" * 60)
 
 def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
-    """Download files from MEGA.nz and organize them based on file type."""
+    """Download files from MEGA.nz with improved error handling and fallback options."""
     if not MEGA_AVAILABLE:
-        raise Exception("MEGA support not available. Install with: uv add mega.py")
+        print("❌ MEGA support not available.")
+        print("💡 Fallback: Opening MEGA link in browser for manual download...")
+        import webbrowser
+        webbrowser.open(link)
+        raise RuntimeError("MEGA download requires manual intervention. Please download the file manually from the opened browser tab.")
     
-    print(f"Downloading MEGA file: {link}")
+    print(f"📥 Downloading MEGA file: {link}")
+    
+    from mega import Mega
+    
+    # Initialize MEGA client
+    mega = Mega()
+    m = mega.login()
     
     try:
-        # Initialize MEGA client
-        mega = Mega()
-        m = mega.login()
-        
-        # Download the file to a temporary location
-        temp_dir = os.path.join(get_base_dir(), "temp_mega")
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        # Download file
+        # Get file info
         file_info = m.get_public_url_info(link)
         filename = sanitize_filename(file_info['name'])
-        temp_file_path = os.path.join(temp_dir, filename)
+        file_size = file_info['size']
         
-        print(f"Downloading: {filename}")
-        m.download_url(link, temp_dir)
-        
-        # Determine file type and move to appropriate folder
+        print(f"📁 File: {filename} ({file_size:,} bytes)")
+          # Check if file already exists
+        final_video_path = os.path.join(video_folder, filename)
+        final_audio_path = os.path.join(audio_folder, filename)
+          # Check file type and handle accordingly
         file_ext = os.path.splitext(filename)[1].lower()
-        file_basename = os.path.splitext(filename)[0]
-        
-        # Audio formats that should go directly to Audio folder
-        audio_formats = ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma']
-        # Video formats that should go to Video folder and have audio extracted
-        video_formats = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v']
-        
-        if file_ext in audio_formats:
-            # Audio file - move directly to Audio folder
-            if file_ext != '.mp3':
-                # Convert to MP3 if not already
-                mp3_path = os.path.join(audio_folder, f"{sanitize_filename(file_basename)}.mp3")
-                print(f"Converting {filename} to MP3...")
-                subprocess.run([
-                    ffmpeg_path, "-y", "-i", temp_file_path,
-                    "-q:a", "0", mp3_path
-                ])
-                os.remove(temp_file_path)
-                print(f"Audio file saved: {mp3_path}")
-            else:
-                # Already MP3, just move it
-                final_path = os.path.join(audio_folder, filename)
-                shutil.move(temp_file_path, final_path)
-                print(f"Audio file saved: {final_path}")
-                
-        elif file_ext in video_formats:
-            # Video file - move to Video folder and extract audio
-            if file_ext != '.mp4':
-                # Convert to MP4 if not already
-                mp4_path = os.path.join(video_folder, f"{sanitize_filename(file_basename)}.mp4")
-                reencode_to_mp4(temp_file_path, mp4_path, ffmpeg_path)
-            else:
-                # Already MP4, just move it
-                mp4_path = os.path.join(video_folder, filename)
-                shutil.move(temp_file_path, mp4_path)
-                print(f"Video file saved: {mp4_path}")
+        video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv']
+        audio_extensions = ['.m4a', '.aac', '.wav', '.flac', '.ogg', '.mp3']
+          # If it's an audio file that exists in Videos folder, convert it to MP3 and move to Audio
+        if os.path.exists(final_video_path) and file_ext in audio_extensions:
+            print(f"✓ Audio file found in Videos folder: {final_video_path}")
+            mp3_filename = os.path.splitext(filename)[0] + ".mp3"
+            mp3_path = os.path.join(audio_folder, mp3_filename)
             
-            # Extract audio to MP3
-            extract_audio_to_mp3(mp4_path, audio_folder, ffmpeg_path)
-        else:
-            # Unknown format - try to determine if it's audio or video
-            print(f"Unknown file format: {file_ext}. Attempting to process as video...")
-            try:
-                # Try to convert to MP4 (works for most video formats)
-                mp4_path = os.path.join(video_folder, f"{sanitize_filename(file_basename)}.mp4")
-                reencode_to_mp4(temp_file_path, mp4_path, ffmpeg_path)
-                extract_audio_to_mp3(mp4_path, audio_folder, ffmpeg_path)
-            except Exception as conv_error:
-                # If video conversion fails, try audio conversion
-                print("Video conversion failed, trying audio conversion...")
-                mp3_path = os.path.join(audio_folder, f"{sanitize_filename(file_basename)}.mp3")
-                subprocess.run([
-                    ffmpeg_path, "-y", "-i", temp_file_path,
-                    "-q:a", "0", mp3_path
-                ])
-                os.remove(temp_file_path)
-                print(f"Audio file saved: {mp3_path}")
+            if not os.path.exists(mp3_path):
+                print(f"🎵 Converting {file_ext} to MP3...")
+                try:
+                    extract_audio_to_mp3(final_video_path, audio_folder, ffmpeg_path)
+                    print(f"✅ Audio conversion completed!")
+                    # Remove the original audio file from Videos folder after successful conversion
+                    print(f"🗑️ Removing original audio file from Videos folder...")
+                    os.remove(final_video_path)
+                    print(f"✅ Original audio file removed from Videos folder")
+                except Exception as e:
+                    print(f"Warning: Could not convert audio: {e}")
+            else:
+                print(f"✓ MP3 file already exists: {mp3_path}")
+                # MP3 exists but original is still in Videos folder - remove it
+                print(f"🗑️ Removing duplicate audio file from Videos folder...")
+                try:
+                    os.remove(final_video_path)
+                    print(f"✅ Duplicate audio file removed from Videos folder")
+                except Exception as e:
+                    print(f"Warning: Could not remove original audio file: {e}")
+            return
         
-        # Cleanup temp directory
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
+        # If it's a video file, check if we need to extract audio
+        if os.path.exists(final_video_path) and file_ext in video_extensions:
+            print(f"✓ Video file already exists: {final_video_path}")
+            
+            mp3_filename = os.path.splitext(filename)[0] + ".mp3"
+            mp3_path = os.path.join(audio_folder, mp3_filename)
+            
+            if not os.path.exists(mp3_path):
+                print(f"🎵 MP3 doesn't exist, extracting audio...")
+                try:
+                    extract_audio_to_mp3(final_video_path, audio_folder, ffmpeg_path)
+                    print(f"✅ Audio extraction completed!")
+                except Exception as e:
+                    print(f"Warning: Could not extract audio: {e}")
+            else:
+                print(f"✓ MP3 file already exists: {mp3_path}")
+            return
+        
+        # If audio file exists (but not video), skip
+        if os.path.exists(final_audio_path):
+            print(f"✓ Audio file already exists, skipping download")
+            return
+        
+        # Use a simpler approach: download directly to target folder
+        try:
+            # Try downloading directly to Videos folder
+            print(f"📥 Attempting direct download to Videos folder...")
+            downloaded_file = m.download_url(link, dest_path=video_folder, dest_filename=filename)
+            
+            if downloaded_file and os.path.exists(downloaded_file):
+                print(f"✅ MEGA download successful: {downloaded_file}")
+                
+                # Check file type and handle accordingly
+                file_ext = os.path.splitext(filename)[1].lower()
+                video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv']
+                audio_extensions = ['.m4a', '.aac', '.wav', '.flac', '.ogg', '.mp3']
+                
+                if file_ext in audio_extensions:
+                    # It's an audio file - convert to MP3 and put in Audio folder
+                    print(f"🎵 Audio file detected, converting to MP3...")
+                    try:
+                        extract_audio_to_mp3(downloaded_file, audio_folder, ffmpeg_path)
+                        print(f"✅ Audio conversion completed!")
+                        # Remove the original audio file from Videos folder after conversion
+                        print(f"🗑️ Removing original audio file from Videos folder...")
+                        os.remove(downloaded_file)
+                        print(f"✅ Original audio file removed from Videos folder")
+                    except Exception as e:
+                        print(f"Warning: Could not convert audio: {e}")
+                elif file_ext in video_extensions:
+                    # It's a video file - extract audio to MP3
+                    try:
+                        extract_audio_to_mp3(downloaded_file, audio_folder, ffmpeg_path)
+                    except Exception as e:
+                        print(f"Warning: Could not extract audio: {e}")
+                
+                return
+            else:
+                raise RuntimeError("Download returned no file path")
+                
+        except Exception as download_error:
+            error_msg = str(download_error).lower()
+            
+            if "winerror 32" in error_msg or "being used by another process" in error_msg:
+                print("❌ Windows file locking issue detected with mega.py library")
+                print("💡 This is a known limitation of the mega.py library on Windows")
+                print("🔗 Opening MEGA link in browser for manual download...")
+                
+                # Open the link in browser as fallback
+                import webbrowser
+                webbrowser.open(link)
+                
+                raise RuntimeError(
+                    f"MEGA download failed due to Windows file locking issue. "
+                    f"The file '{filename}' link has been opened in your browser. "
+                    f"Please download it manually and place it in the Videos folder."
+                )
+            else:
+                # For other errors, also provide the manual fallback
+                print(f"❌ MEGA download error: {download_error}")
+                print("🔗 Opening MEGA link in browser for manual download...")
+                
+                import webbrowser
+                webbrowser.open(link)
+                
+                raise RuntimeError(
+                    f"MEGA download failed: {download_error}. "
+                    f"The file link has been opened in your browser for manual download."
+                )
             
     except Exception as e:
-        # Cleanup temp directory on error
-        temp_dir = os.path.join(get_base_dir(), "temp_mega")
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
-        raise Exception(f"MEGA download failed: {str(e)}")
+        # Final fallback - open in browser
+        if "browser" not in str(e):  # Don't open browser again if already opened
+            print("🔗 Opening MEGA link in browser as final fallback...")
+            import webbrowser
+            webbrowser.open(link)
+        
+        raise RuntimeError(f"MEGA download failed: {e}")
+
+def process_downloaded_file(file_path, filename, video_folder, audio_folder, ffmpeg_path):
+    """Process a downloaded file - move to appropriate folder and extract audio if it's a video."""
+    file_ext = os.path.splitext(filename)[1].lower()
+    
+    # Check if it's a video file
+    video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv']
+    audio_extensions = ['.mp3', '.m4a', '.aac', '.wav', '.flac', '.ogg']
+    
+    if file_ext in video_extensions:
+        # Move to Videos folder
+        final_video_path = os.path.join(video_folder, filename)
+        
+        # Check if file already exists
+        if os.path.exists(final_video_path):
+            print(f"Video file already exists: {final_video_path}")
+            return
+        
+        # Copy to Videos folder
+        shutil.copy2(file_path, final_video_path)
+        print(f"✓ Video saved: {final_video_path}")
+        
+        # Extract audio to MP3
+        try:
+            extract_audio_to_mp3(final_video_path, audio_folder, ffmpeg_path)
+        except Exception as e:
+            print(f"Warning: Could not extract audio: {e}")
+            
+    elif file_ext in audio_extensions:
+        # Move to Audio folder
+        final_audio_path = os.path.join(audio_folder, filename)
+        
+        # Check if file already exists
+        if os.path.exists(final_audio_path):
+            print(f"Audio file already exists: {final_audio_path}")
+            return
+        
+        # Copy to Audio folder
+        shutil.copy2(file_path, final_audio_path)
+        print(f"✓ Audio saved: {final_audio_path}")
+        
+    else:
+        # Unknown file type - save to Videos folder by default
+        final_path = os.path.join(video_folder, filename)
+        shutil.copy2(file_path, final_path)
+        print(f"✓ File saved: {final_path}")
+        print(f"Note: Unknown file type '{file_ext}' - saved to Videos folder")
+
+def detect_duplicates_simple(links):
+    """Detect duplicate links using simple string comparison and URL normalization."""
+    seen_links = set()
+    unique_links = []
+    duplicates = []
+    
+    print("🔍 Checking for duplicate links...")
+    
+    for i, link in enumerate(links):
+        link = link.strip()
+        if not link:
+            continue
+        
+        # Normalize the link
+        if "youtube.com" in link or "youtu.be" in link:
+            normalized = sanitize_youtube_link(link)
+        else:
+            # For MEGA and other links, normalize by removing trailing parameters but keeping the core
+            normalized = link.split('?')[0].split('#')[0] if '#' not in link else link
+        
+        if normalized in seen_links:
+            duplicates.append((i, link))
+            print(f"   🔄 Found duplicate link #{i + 1}: {link[:60]}...")
+        else:
+            seen_links.add(normalized)
+            unique_links.append(link)
+    
+    return unique_links, duplicates
+
+def cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path):
+    """Clean up any audio files that are in the Videos folder - convert to MP3 and move to Audio folder."""
+    audio_extensions = ['.m4a', '.aac', '.wav', '.flac', '.ogg', '.mp3']
+    
+    # Find all audio files in Videos folder
+    misplaced_audio_files = []
+    for filename in os.listdir(video_folder):
+        file_path = os.path.join(video_folder, filename)
+        if os.path.isfile(file_path):
+            file_ext = os.path.splitext(filename)[1].lower()
+            if file_ext in audio_extensions:
+                misplaced_audio_files.append((file_path, filename))
+    
+    if not misplaced_audio_files:
+        return
+    
+    print(f"\n🧹 Found {len(misplaced_audio_files)} audio file(s) in Videos folder that need cleanup...")
+    
+    for file_path, filename in misplaced_audio_files:
+        try:
+            base_name = os.path.splitext(filename)[0]
+            mp3_filename = base_name + ".mp3"
+            mp3_path = os.path.join(audio_folder, mp3_filename)
+            
+            print(f"🎵 Processing misplaced audio file: {filename}")
+            
+            if os.path.exists(mp3_path):
+                print(f"✓ MP3 already exists in Audio folder: {mp3_filename}")
+                print(f"🗑️ Removing duplicate from Videos folder...")
+                os.remove(file_path)
+                print(f"✅ Removed: {filename}")
+            else:
+                print(f"🎵 Converting to MP3 and moving to Audio folder...")
+                extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path)
+                print(f"🗑️ Removing original from Videos folder...")
+                os.remove(file_path)
+                print(f"✅ Converted and moved: {filename} → {mp3_filename}")
+                
+        except Exception as e:
+            print(f"❌ Error processing {filename}: {e}")
 
 if __name__ == "__main__":
     display_ascii_logo() 
@@ -439,6 +650,7 @@ if __name__ == "__main__":
     try:
         if not os.path.exists(links_file):
             raise FileNotFoundError(f"Required file 'links.txt' not found in {base_dir}")
+        
         download_videos_and_audio(links_file, video_folder, audio_folder)
     except Exception as e:
         print(f"An error occurred: {e}")
