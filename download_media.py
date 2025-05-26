@@ -354,15 +354,19 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
 
 def display_ascii_logo():
     """Display ASCII art logo when the program starts."""
+    # ANSI color codes
+    YELLOW = '\033[93m'
+    GREEN = '\033[92m'
+    RESET = '\033[0m'
+    
     print(r"""
     __    ____  _____________  __
    / /   / __ \/ ____/ ____/ |/ /
   / /   / /_/ / / __/ __/  |   / 
  / /___/ _, _/ /_/ / /___ /   |  
 /_____/_/ |_|\____/_____//_/|_| 
-                                
-YouTube Downloader - v3.7 (Mega Support + Autobot Detection)
-    """)
+                                """)
+    print(f"YouTube Downloader - {YELLOW}v3.7{RESET} {GREEN}(Mega Support + Autobot Detection){RESET}")
     print("=" * 60)
 
 def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
