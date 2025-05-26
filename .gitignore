@@ -6,6 +6,7 @@ dist/
 wheels/
 *.egg-info
 working.py
+links.txt
 
 # FFmpeg binary (downloaded automatically by the script)
 ffmpeg.exe
