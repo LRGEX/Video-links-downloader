@@ -20,9 +20,12 @@ def sanitize_youtube_link(link):
         if "/video/" in link:
             video_id = re.search(r'/video/(\d+)', link)
             if video_id:
-                return f"https://www.tiktok.com/video/{video_id.group(1)}"
+                return f"https://www.tiktok.com/@user/video/{video_id.group(1)}"
         elif "vm.tiktok.com" in link or "vt.tiktok.com" in link:
-            # For shortened TikTok links, return as-is (yt-dlp will handle redirection)
+            # For shortened TikTok links, return as-is (yt-dlp will resolve the redirect)
+            return link
+        elif "/t/" in link:
+            # Handle tiktok.com/t/ style links
             return link
     
     # Check if it's a YouTube link
@@ -298,10 +301,9 @@ def display_ascii_logo():
   / /   / /_/ / / __/ __/  |   / 
  / /___/ _, _/ /_/ / /___ /   |  
 /_____/_/ |_|\____/_____//_/|_| 
-                                              
-    YouTube Downloader - v2.6
+                                                YouTube Downloader - v2.7 (Anti-Bot Enhanced)
     """)
-    print("=" * 60)        
+    print("=" * 60)
 
 if __name__ == "__main__":
     display_ascii_logo() 
