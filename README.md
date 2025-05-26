@@ -105,6 +105,9 @@ pip install pyinstaller
 # Create executable with custom icon
 pyinstaller --onefile --icon="path/to/your/icon.ico" --name="VideoDownloader" --hidden-import=yt_dlp download_media.py
 
+example :pyinstaller --onefile --icon="E:\LRG\Ezme-LRG Cloud\Evolv-Ezmex\LRG-EX Projects\Brand\Logos\Ico\bigx-dark-icon.ico" --name="LRGEX Video Downloader v3.7" --hidden-import=yt_dlp download_media.py
+
+
 # Or using UV
 uv run pyinstaller --onefile --icon="path/to/your/icon.ico" --name="VideoDownloader" --hidden-import=yt_dlp download_media.py
 ```

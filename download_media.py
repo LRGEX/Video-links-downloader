@@ -6,12 +6,12 @@ Enhanced anti-bot detection for YouTube with improved MEGA.nz support
 Features:
 - Multi-strategy anti-bot detection (5 fallback methods) ✅ WORKING
 - Browser cookie extraction (Chrome/Firefox/Edge) ✅ WORKING
-- MEGA.nz file download with automatic browser fallback 🔄 IMPROVED
+- MEGA.nz file download via yt-dlp (no additional library needed) ✅ WORKING
 - Automatic file organization (MP4 videos, MP3 audio) ✅ WORKING
 - Robust error handling and logging ✅ WORKING
-- Automatic cleanup of misplaced audio files ✅ NEW
+- Automatic cleanup of misplaced audio files ✅ WORKING
 
-Dependencies: yt-dlp, requests, mega.py
+Dependencies: yt-dlp, requests
 """
 
 import os
@@ -29,14 +29,9 @@ import gc
 import webbrowser
 from urllib.parse import urlparse
 
-# MEGA support using official mega.py library (Python 3.10 compatible)
-try:
-    from mega import Mega
-    MEGA_AVAILABLE = True
-    print("✓ MEGA.py library available")
-except ImportError:
-    MEGA_AVAILABLE = False
-    print("⚠ Warning: MEGA support not available. Install with: pip install mega.py")
+# MEGA support through yt-dlp (no additional library needed)
+MEGA_AVAILABLE = True  # Always available since we use yt-dlp for MEGA downloads
+print("✓ MEGA support available via yt-dlp")
 
 def sanitize_filename(filename):
     """Sanitize filenames by removing or replacing invalid characters."""
@@ -370,152 +365,18 @@ def display_ascii_logo():
     print("=" * 60)
 
 def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
-    """Download files from MEGA.nz with improved error handling and fallback options."""
+    """Download files from MEGA.nz using yt-dlp."""
     print(f"📥 Downloading MEGA file: {link}")
     
-    # Try yt-dlp first (often works better than mega.py for MEGA links)
+    # Use yt-dlp for MEGA downloads (works better than mega.py)
     try:
-        print("🔄 Trying yt-dlp for MEGA download...")
+        print("🔄 Using yt-dlp for MEGA download...")
         download_video(link, video_folder, audio_folder, ffmpeg_path)
         print("✅ MEGA download successful via yt-dlp!")
         return
     except Exception as ytdlp_error:
-        print(f"yt-dlp failed: {str(ytdlp_error)[:100]}...")
-        print("🔄 Falling back to mega.py library...")
-      # Fallback to mega.py if yt-dlp fails
-    if not MEGA_AVAILABLE:
-        print("❌ MEGA support not available and yt-dlp failed.")
-        raise RuntimeError("MEGA download failed: Both yt-dlp and mega.py unavailable")
-    
-    from mega import Mega
-    
-    # Initialize MEGA client
-    mega = Mega()
-    m = mega.login()
-    
-    try:        
-        # Get file info first
-        file_info = m.get_public_url_info(link)
-        filename = sanitize_filename(file_info['name'])
-        file_size = file_info['size']
-        
-        print(f"📁 File: {filename} ({file_size:,} bytes)")
-        
-        # Check if file already exists BEFORE attempting download
-        final_video_path = os.path.join(video_folder, filename)
-        final_audio_path = os.path.join(audio_folder, filename)
-        
-        # Check file type and handle accordingly
-        file_ext = os.path.splitext(filename)[1].lower()
-        video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv']
-        audio_extensions = ['.m4a', '.aac', '.wav', '.flac', '.ogg', '.mp3']
-        
-        # If it's an audio file that exists in Videos folder, convert it to MP3 and move to Audio
-        if os.path.exists(final_video_path) and file_ext in audio_extensions:
-            print(f"✓ Audio file found in Videos folder: {final_video_path}")
-            mp3_filename = os.path.splitext(filename)[0] + ".mp3"
-            mp3_path = os.path.join(audio_folder, mp3_filename)
-            
-            if not os.path.exists(mp3_path):
-                print(f"🎵 Converting {file_ext} to MP3...")
-                try:
-                    extract_audio_to_mp3(final_video_path, audio_folder, ffmpeg_path)
-                    print(f"✅ Audio conversion completed!")
-                    # Remove the original audio file from Videos folder after successful conversion
-                    print(f"🗑️ Removing original audio file from Videos folder...")
-                    os.remove(final_video_path)
-                    print(f"✅ Original audio file removed from Videos folder")
-                except Exception as e:
-                    print(f"Warning: Could not convert audio: {e}")
-            else:
-                print(f"✓ MP3 file already exists: {mp3_path}")
-                # MP3 exists but original is still in Videos folder - remove it
-                print(f"🗑️ Removing duplicate audio file from Videos folder...")
-                try:
-                    os.remove(final_video_path)
-                    print(f"✅ Duplicate audio file removed from Videos folder")
-                except Exception as e:
-                    print(f"Warning: Could not remove original audio file: {e}")
-            return
-        
-        # If it's a video file, check if we need to extract audio
-        if os.path.exists(final_video_path) and file_ext in video_extensions:
-            print(f"✓ Video file already exists: {final_video_path}")
-            
-            mp3_filename = os.path.splitext(filename)[0] + ".mp3"
-            mp3_path = os.path.join(audio_folder, mp3_filename)
-            
-            if not os.path.exists(mp3_path):
-                print(f"🎵 MP3 doesn't exist, extracting audio...")
-                try:
-                    extract_audio_to_mp3(final_video_path, audio_folder, ffmpeg_path)
-                    print(f"✅ Audio extraction completed!")
-                except Exception as e:
-                    print(f"Warning: Could not extract audio: {e}")
-            else:
-                print(f"✓ MP3 file already exists: {mp3_path}")
-            return
-        
-        # If audio file exists (but not video), skip
-        if os.path.exists(final_audio_path):
-            print(f"✓ Audio file already exists, skipping download")
-            return
-        
-        # Use a simpler approach: download directly to target folder
-        try:
-            # Try downloading directly to Videos folder
-            print(f"📥 Attempting direct download to Videos folder...")
-            downloaded_file = m.download_url(link, dest_path=video_folder, dest_filename=filename)
-            
-            if downloaded_file and os.path.exists(downloaded_file):
-                print(f"✅ MEGA download successful: {downloaded_file}")
-                
-                # Check file type and handle accordingly
-                file_ext = os.path.splitext(filename)[1].lower()
-                video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv']
-                audio_extensions = ['.m4a', '.aac', '.wav', '.flac', '.ogg', '.mp3']
-                
-                if file_ext in audio_extensions:
-                    # It's an audio file - convert to MP3 and put in Audio folder
-                    print(f"🎵 Audio file detected, converting to MP3...")
-                    try:
-                        extract_audio_to_mp3(downloaded_file, audio_folder, ffmpeg_path)
-                        print(f"✅ Audio conversion completed!")
-                        # Remove the original audio file from Videos folder after conversion
-                        print(f"🗑️ Removing original audio file from Videos folder...")
-                        os.remove(downloaded_file)
-                        print(f"✅ Original audio file removed from Videos folder")
-                    except Exception as e:
-                        print(f"Warning: Could not convert audio: {e}")
-                elif file_ext in video_extensions:
-                    # It's a video file - extract audio to MP3
-                    try:
-                        extract_audio_to_mp3(downloaded_file, audio_folder, ffmpeg_path)
-                    except Exception as e:
-                        print(f"Warning: Could not extract audio: {e}")
-                
-                return
-            else:
-                raise RuntimeError("Download returned no file path")
-                
-        except Exception as download_error:
-            error_msg = str(download_error).lower()
-            
-            if "winerror 32" in error_msg or "being used by another process" in error_msg:
-                print("❌ Windows file locking issue detected with mega.py library")
-                print("💡 This is a known limitation of the mega.py library on Windows")
-                raise RuntimeError(
-                    f"MEGA download failed due to Windows file locking issue with mega.py. "
-                    f"File: '{filename}'. Try running the script again or use a different download method."
-                )
-            else:
-                # For other errors, raise without opening browser
-                print(f"❌ MEGA download error: {download_error}")
-                raise RuntimeError(f"MEGA download failed: {download_error}")
-            
-    except Exception as e:
-        # Don't open browser, just raise the error
-        raise RuntimeError(f"MEGA download failed: {e}")
+        print(f"❌ MEGA download failed: {str(ytdlp_error)[:100]}...")
+        raise RuntimeError(f"MEGA download failed: {ytdlp_error}")
 
 def process_downloaded_file(file_path, filename, video_folder, audio_folder, ffmpeg_path):
     """Process a downloaded file - move to appropriate folder and extract audio if it's a video."""
@@ -685,10 +546,15 @@ if __name__ == "__main__":
     
     try:
         if not os.path.exists(links_file):
-            raise FileNotFoundError(f"Required file 'links.txt' not found in {base_dir}")
+            print(f"📝 Creating 'links.txt' file in {base_dir}")
+            with open(links_file, "w", encoding="utf-8") as f:
+                f.write("# Add your video links here (one per line)\n")
+            print(f"✅ Created 'links.txt' with examples. Please add your links and run the program again.")
+            input("\nPress Enter to exit...")
+            sys.exit(0)
         
         download_videos_and_audio(links_file, video_folder, audio_folder)
     except Exception as e:
         print(f"An error occurred: {e}")
-    finally:
-        input("\nPress Enter to exit...")
+    
+    input("\nPress Enter to exit...")
