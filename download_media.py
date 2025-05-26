@@ -301,7 +301,7 @@ def display_ascii_logo():
   / /   / /_/ / / __/ __/  |   / 
  / /___/ _, _/ /_/ / /___ /   |  
 /_____/_/ |_|\____/_____//_/|_| 
-                                                YouTube Downloader - v2.7 (Anti-Bot Enhanced)
+                                                YouTube Downloader - v3.0 (Anti-Bot Enhanced)
     """)
     print("=" * 60)
 
