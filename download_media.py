@@ -7,6 +7,16 @@ import sys
 import re
 import shutil
 import time
+import requests
+from urllib.parse import urlparse
+
+# Try to import MEGA support, handle gracefully if not available
+try:
+    from mega import Mega
+    MEGA_AVAILABLE = True
+except ImportError:
+    MEGA_AVAILABLE = False
+    print("Warning: MEGA support not available. Install with: uv add mega.py")
 
 def sanitize_filename(filename):
     """Sanitize filenames by removing or replacing invalid characters."""
@@ -178,8 +188,11 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
     os.makedirs(video_folder, exist_ok=True)
     os.makedirs(audio_folder, exist_ok=True)
     failed_links = []
+    
     # Ensure FFmpeg is available
-    ffmpeg_path = get_ffmpeg_path()    # Read the list of links
+    ffmpeg_path = get_ffmpeg_path()
+    
+    # Read the list of links
     with open(links_file, "r", encoding="utf-8") as file:
         links = file.readlines()
     
@@ -187,11 +200,18 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
         link = link.strip()
         if not link:
             continue
+        
         # Clean YouTube link by removing extra parameters
         sanitized_link = sanitize_youtube_link(link)
         print(f"\nProcessing ({i}/{len(links)}): {sanitized_link}")
+        
         try:
-            download_video(sanitized_link, video_folder, audio_folder, ffmpeg_path)
+            # Check if it's a MEGA link
+            if "mega.nz" in sanitized_link.lower():
+                download_mega_file(sanitized_link, video_folder, audio_folder, ffmpeg_path)
+            else:
+                download_video(sanitized_link, video_folder, audio_folder, ffmpeg_path)
+            
             # Small delay between downloads to be respectful to servers
             time.sleep(1)
         except Exception as e:
@@ -203,16 +223,19 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
             )
             print(f"Failed to process {sanitized_link}: {reason}")
             continue
+
     if failed_links:
         with open(log_file, "w", encoding="utf-8") as log:
             log.write("Links that could not be processed:\n\n")
             log.write("\n".join(failed_links))
         print(f"Log file created: {log_file}")
+    
     print("All downloads are complete!")
 
 def download_video(link, video_folder, audio_folder, ffmpeg_path):
     """Download video and ensure only MP4 in Videos and MP3 in Audio."""
     video_template = os.path.join(video_folder, sanitize_filename("%(title)s.%(ext)s"))
+    
     # Adjust yt_dlp options to prioritize MP4 with anti-bot measures
     ydl_opts = {
         "outtmpl": video_template,
@@ -226,7 +249,9 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
         "sleep_interval": 1,  # Add delay between requests
         "max_sleep_interval": 3,
         "ignoreerrors": False,  # We'll handle errors manually
-    }    # Try multiple download strategies if the first one fails
+    }
+    
+    # Try multiple download strategies if the first one fails
     download_success = False
     strategies = [
         # Strategy 1: Use Chrome cookies
@@ -293,6 +318,7 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
     
     if not download_success:
         raise Exception("All download strategies failed. Video may require manual intervention or be unavailable.")
+
 def display_ascii_logo():
     """Display ASCII art logo when the program starts."""
     print(r"""
@@ -301,9 +327,105 @@ def display_ascii_logo():
   / /   / /_/ / / __/ __/  |   / 
  / /___/ _, _/ /_/ / /___ /   |  
 /_____/_/ |_|\____/_____//_/|_| 
-                                                YouTube Downloader - v3.0 (Anti-Bot Enhanced)
+                                
+YouTube Downloader - v3.0 (Anti-Bot Enhanced)
     """)
     print("=" * 60)
+
+def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
+    """Download files from MEGA.nz and organize them based on file type."""
+    if not MEGA_AVAILABLE:
+        raise Exception("MEGA support not available. Install with: uv add mega.py")
+    
+    print(f"Downloading MEGA file: {link}")
+    
+    try:
+        # Initialize MEGA client
+        mega = Mega()
+        m = mega.login()
+        
+        # Download the file to a temporary location
+        temp_dir = os.path.join(get_base_dir(), "temp_mega")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Download file
+        file_info = m.get_public_url_info(link)
+        filename = sanitize_filename(file_info['name'])
+        temp_file_path = os.path.join(temp_dir, filename)
+        
+        print(f"Downloading: {filename}")
+        m.download_url(link, temp_dir)
+        
+        # Determine file type and move to appropriate folder
+        file_ext = os.path.splitext(filename)[1].lower()
+        file_basename = os.path.splitext(filename)[0]
+        
+        # Audio formats that should go directly to Audio folder
+        audio_formats = ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma']
+        # Video formats that should go to Video folder and have audio extracted
+        video_formats = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v']
+        
+        if file_ext in audio_formats:
+            # Audio file - move directly to Audio folder
+            if file_ext != '.mp3':
+                # Convert to MP3 if not already
+                mp3_path = os.path.join(audio_folder, f"{sanitize_filename(file_basename)}.mp3")
+                print(f"Converting {filename} to MP3...")
+                subprocess.run([
+                    ffmpeg_path, "-y", "-i", temp_file_path,
+                    "-q:a", "0", mp3_path
+                ])
+                os.remove(temp_file_path)
+                print(f"Audio file saved: {mp3_path}")
+            else:
+                # Already MP3, just move it
+                final_path = os.path.join(audio_folder, filename)
+                shutil.move(temp_file_path, final_path)
+                print(f"Audio file saved: {final_path}")
+                
+        elif file_ext in video_formats:
+            # Video file - move to Video folder and extract audio
+            if file_ext != '.mp4':
+                # Convert to MP4 if not already
+                mp4_path = os.path.join(video_folder, f"{sanitize_filename(file_basename)}.mp4")
+                reencode_to_mp4(temp_file_path, mp4_path, ffmpeg_path)
+            else:
+                # Already MP4, just move it
+                mp4_path = os.path.join(video_folder, filename)
+                shutil.move(temp_file_path, mp4_path)
+                print(f"Video file saved: {mp4_path}")
+            
+            # Extract audio to MP3
+            extract_audio_to_mp3(mp4_path, audio_folder, ffmpeg_path)
+        else:
+            # Unknown format - try to determine if it's audio or video
+            print(f"Unknown file format: {file_ext}. Attempting to process as video...")
+            try:
+                # Try to convert to MP4 (works for most video formats)
+                mp4_path = os.path.join(video_folder, f"{sanitize_filename(file_basename)}.mp4")
+                reencode_to_mp4(temp_file_path, mp4_path, ffmpeg_path)
+                extract_audio_to_mp3(mp4_path, audio_folder, ffmpeg_path)
+            except Exception as conv_error:
+                # If video conversion fails, try audio conversion
+                print("Video conversion failed, trying audio conversion...")
+                mp3_path = os.path.join(audio_folder, f"{sanitize_filename(file_basename)}.mp3")
+                subprocess.run([
+                    ffmpeg_path, "-y", "-i", temp_file_path,
+                    "-q:a", "0", mp3_path
+                ])
+                os.remove(temp_file_path)
+                print(f"Audio file saved: {mp3_path}")
+        
+        # Cleanup temp directory
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+            
+    except Exception as e:
+        # Cleanup temp directory on error
+        temp_dir = os.path.join(get_base_dir(), "temp_mega")
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        raise Exception(f"MEGA download failed: {str(e)}")
 
 if __name__ == "__main__":
     display_ascii_logo() 
@@ -313,6 +435,7 @@ if __name__ == "__main__":
     video_folder = os.path.join(base_dir, "Videos")
     audio_folder = os.path.join(base_dir, "Audio")
     links_file = os.path.join(base_dir, "links.txt")
+    
     try:
         if not os.path.exists(links_file):
             raise FileNotFoundError(f"Required file 'links.txt' not found in {base_dir}")

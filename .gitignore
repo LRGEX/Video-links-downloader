@@ -7,6 +7,10 @@ wheels/
 *.egg-info
 working.py
 links.txt
+Audio/
+Videos/
+test_problem_links.txt
+test_links.txt
 
 # FFmpeg binary (downloaded automatically by the script)
 ffmpeg.exe

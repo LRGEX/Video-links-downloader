@@ -1,0 +1,6 @@
+Links that could not be processed:
+
+Link: https://mega.nz/file/K6ZEDCYa#57tR8Xw8Ugz888YlFgFmavfgSxgmuFwO0IEo2VRoPvo
+Reason: MEGA support not available. Install with: uv add mega.py
+
+-----------------------------------------
