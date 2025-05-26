@@ -250,10 +250,12 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
                 f"Link: {link}\nReason: {reason}\n\n-----------------------------------------\n"
             )
             print(f"Failed to process {sanitized_link}: {reason}")
-            continue
-
-    # Final cleanup after all downloads
+            continue    # Final cleanup after all downloads
     cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path)
+    
+    # IMPORTANT: Extract audio from any video files that don't have corresponding MP3s
+    print("\n🎵 Final check: Extracting MP3 from any videos missing audio files...")
+    extract_missing_audio_files(video_folder, audio_folder, ffmpeg_path)
 
     if failed_links:
         with open(log_file, "w", encoding="utf-8") as log:
@@ -365,14 +367,21 @@ YouTube Downloader - v3.7 (Mega Support + Autobot Detection)
 
 def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
     """Download files from MEGA.nz with improved error handling and fallback options."""
-    if not MEGA_AVAILABLE:
-        print("❌ MEGA support not available.")
-        print("💡 Fallback: Opening MEGA link in browser for manual download...")
-        import webbrowser
-        webbrowser.open(link)
-        raise RuntimeError("MEGA download requires manual intervention. Please download the file manually from the opened browser tab.")
-    
     print(f"📥 Downloading MEGA file: {link}")
+    
+    # Try yt-dlp first (often works better than mega.py for MEGA links)
+    try:
+        print("🔄 Trying yt-dlp for MEGA download...")
+        download_video(link, video_folder, audio_folder, ffmpeg_path)
+        print("✅ MEGA download successful via yt-dlp!")
+        return
+    except Exception as ytdlp_error:
+        print(f"yt-dlp failed: {str(ytdlp_error)[:100]}...")
+        print("🔄 Falling back to mega.py library...")
+      # Fallback to mega.py if yt-dlp fails
+    if not MEGA_AVAILABLE:
+        print("❌ MEGA support not available and yt-dlp failed.")
+        raise RuntimeError("MEGA download failed: Both yt-dlp and mega.py unavailable")
     
     from mega import Mega
     
@@ -380,21 +389,24 @@ def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
     mega = Mega()
     m = mega.login()
     
-    try:
-        # Get file info
+    try:        
+        # Get file info first
         file_info = m.get_public_url_info(link)
         filename = sanitize_filename(file_info['name'])
         file_size = file_info['size']
         
         print(f"📁 File: {filename} ({file_size:,} bytes)")
-          # Check if file already exists
+        
+        # Check if file already exists BEFORE attempting download
         final_video_path = os.path.join(video_folder, filename)
         final_audio_path = os.path.join(audio_folder, filename)
-          # Check file type and handle accordingly
+        
+        # Check file type and handle accordingly
         file_ext = os.path.splitext(filename)[1].lower()
         video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv']
         audio_extensions = ['.m4a', '.aac', '.wav', '.flac', '.ogg', '.mp3']
-          # If it's an audio file that exists in Videos folder, convert it to MP3 and move to Audio
+        
+        # If it's an audio file that exists in Videos folder, convert it to MP3 and move to Audio
         if os.path.exists(final_video_path) and file_ext in audio_extensions:
             print(f"✓ Audio file found in Videos folder: {final_video_path}")
             mp3_filename = os.path.splitext(filename)[0] + ".mp3"
@@ -488,37 +500,17 @@ def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
             if "winerror 32" in error_msg or "being used by another process" in error_msg:
                 print("❌ Windows file locking issue detected with mega.py library")
                 print("💡 This is a known limitation of the mega.py library on Windows")
-                print("🔗 Opening MEGA link in browser for manual download...")
-                
-                # Open the link in browser as fallback
-                import webbrowser
-                webbrowser.open(link)
-                
                 raise RuntimeError(
-                    f"MEGA download failed due to Windows file locking issue. "
-                    f"The file '{filename}' link has been opened in your browser. "
-                    f"Please download it manually and place it in the Videos folder."
+                    f"MEGA download failed due to Windows file locking issue with mega.py. "
+                    f"File: '{filename}'. Try running the script again or use a different download method."
                 )
             else:
-                # For other errors, also provide the manual fallback
+                # For other errors, raise without opening browser
                 print(f"❌ MEGA download error: {download_error}")
-                print("🔗 Opening MEGA link in browser for manual download...")
-                
-                import webbrowser
-                webbrowser.open(link)
-                
-                raise RuntimeError(
-                    f"MEGA download failed: {download_error}. "
-                    f"The file link has been opened in your browser for manual download."
-                )
+                raise RuntimeError(f"MEGA download failed: {download_error}")
             
     except Exception as e:
-        # Final fallback - open in browser
-        if "browser" not in str(e):  # Don't open browser again if already opened
-            print("🔗 Opening MEGA link in browser as final fallback...")
-            import webbrowser
-            webbrowser.open(link)
-        
+        # Don't open browser, just raise the error
         raise RuntimeError(f"MEGA download failed: {e}")
 
 def process_downloaded_file(file_path, filename, video_folder, audio_folder, ffmpeg_path):
@@ -596,6 +588,46 @@ def detect_duplicates_simple(links):
             unique_links.append(link)
     
     return unique_links, duplicates
+
+def extract_missing_audio_files(video_folder, audio_folder, ffmpeg_path):
+    """Extract MP3 from any video files that don't have corresponding audio files."""
+    video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.webm', '.flv', '.wmv']
+    
+    # Find all video files
+    video_files = []
+    for filename in os.listdir(video_folder):
+        file_path = os.path.join(video_folder, filename)
+        if os.path.isfile(file_path):
+            file_ext = os.path.splitext(filename)[1].lower()
+            if file_ext in video_extensions:
+                video_files.append((file_path, filename))
+    
+    if not video_files:
+        return
+    
+    # Check which videos are missing MP3 files
+    missing_audio = []
+    for file_path, filename in video_files:
+        base_name = os.path.splitext(filename)[0]
+        mp3_filename = base_name + ".mp3"
+        mp3_path = os.path.join(audio_folder, mp3_filename)
+        
+        if not os.path.exists(mp3_path):
+            missing_audio.append((file_path, filename, mp3_filename))
+    
+    if not missing_audio:
+        print("✅ All video files already have corresponding MP3 files!")
+        return
+    
+    print(f"🎵 Found {len(missing_audio)} video(s) missing MP3 files. Extracting now...")
+    
+    for file_path, filename, mp3_filename in missing_audio:
+        try:
+            print(f"🎵 Extracting audio from: {filename}")
+            extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path)
+            print(f"✅ Created: {mp3_filename}")
+        except Exception as e:
+            print(f"❌ Failed to extract audio from {filename}: {e}")
 
 def cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path):
     """Clean up any audio files that are in the Videos folder - convert to MP3 and move to Audio folder."""
