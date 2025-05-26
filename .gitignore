@@ -7,5 +7,8 @@ wheels/
 *.egg-info
 working.py
 
+# FFmpeg binary (downloaded automatically by the script)
+ffmpeg.exe
+
 # Virtual environments
 .venv
