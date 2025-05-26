@@ -13,7 +13,18 @@ def sanitize_filename(filename):
     return re.sub(r'[<>:"/\\|?*]', '_', filename)
 
 def sanitize_youtube_link(link):
-    """Sanitize YouTube links by removing unnecessary parameters."""
+    """Sanitize YouTube links by removing unnecessary parameters and handle other platforms."""
+    # Handle TikTok links
+    if "tiktok.com" in link:
+        # Extract video ID from TikTok links
+        if "/video/" in link:
+            video_id = re.search(r'/video/(\d+)', link)
+            if video_id:
+                return f"https://www.tiktok.com/video/{video_id.group(1)}"
+        elif "vm.tiktok.com" in link or "vt.tiktok.com" in link:
+            # For shortened TikTok links, return as-is (yt-dlp will handle redirection)
+            return link
+    
     # Check if it's a YouTube link
     if "youtube.com/watch" in link or "youtu.be/" in link:
         # Extract the video ID 
@@ -24,7 +35,7 @@ def sanitize_youtube_link(link):
                 return f"https://youtube.com/watch?v={video_id.group(1)}"
         elif "youtu.be/" in link:
             # For shortened YouTube URLs
-            video_id = re.search(r'youtu\.be/([^?&]+)', link) 
+            video_id = re.search(r'youtu\.be/([^?&]+)', link)
             if video_id:
                 return f"https://youtube.com/watch?v={video_id.group(1)}"
     
@@ -165,21 +176,25 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
     os.makedirs(audio_folder, exist_ok=True)
     failed_links = []
     # Ensure FFmpeg is available
-    ffmpeg_path = get_ffmpeg_path()
-    # Read the list of links
+    ffmpeg_path = get_ffmpeg_path()    # Read the list of links
     with open(links_file, "r", encoding="utf-8") as file:
         links = file.readlines()
-    for link in links:
+    
+    for i, link in enumerate(links, 1):
         link = link.strip()
         if not link:
             continue
         # Clean YouTube link by removing extra parameters
         sanitized_link = sanitize_youtube_link(link)
-        print(f"Processing: {sanitized_link}")
+        print(f"\nProcessing ({i}/{len(links)}): {sanitized_link}")
         try:
             download_video(sanitized_link, video_folder, audio_folder, ffmpeg_path)
+            # Small delay between downloads to be respectful to servers
+            time.sleep(1)
         except Exception as e:
             reason = str(e).split("\n")[0]
+            # Clean up ANSI color codes from error messages
+            reason = re.sub(r'\[0;\d+m', '', reason)
             failed_links.append(
                 f"Link: {link}\nReason: {reason}\n\n-----------------------------------------\n"
             )
@@ -195,31 +210,86 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
 def download_video(link, video_folder, audio_folder, ffmpeg_path):
     """Download video and ensure only MP4 in Videos and MP3 in Audio."""
     video_template = os.path.join(video_folder, sanitize_filename("%(title)s.%(ext)s"))
-    # Adjust yt_dlp options to prioritize MP4
+    # Adjust yt_dlp options to prioritize MP4 with anti-bot measures
     ydl_opts = {
         "outtmpl": video_template,
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "merge_output_format": "mp4",  # Ensure merged output is MP4
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        result = ydl.extract_info(link, download=False)
-        video_title = sanitize_filename(result.get("title", "unknown"))
-        mp4_file_path = os.path.join(video_folder, f"{video_title}.mp4")
-        # Skip if video already exists
-        if os.path.exists(mp4_file_path):
-            print(f"MP4 file already exists, skipping download: {mp4_file_path}")
-            return
-        # Download the video
-        print(f"Downloading video: {link}")
-        result = ydl.extract_info(link, download=True)
-        downloaded_file = ydl.prepare_filename(result)
-        # Check if re-encoding is needed
-        if not downloaded_file.endswith(".mp4"):
-            reencode_to_mp4(downloaded_file, mp4_file_path, ffmpeg_path)
-        else:
-            os.rename(downloaded_file, mp4_file_path)
-        # Extract audio to MP3
-        extract_audio_to_mp3(mp4_file_path, audio_folder, ffmpeg_path)
+        "cookiesfrombrowser": ("chrome",),  # Try to use Chrome cookies automatically
+        "extractor_retries": 3,  # Retry failed extractions
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        },
+        "sleep_interval": 1,  # Add delay between requests
+        "max_sleep_interval": 3,
+        "ignoreerrors": False,  # We'll handle errors manually
+    }    # Try multiple download strategies if the first one fails
+    download_success = False
+    strategies = [
+        # Strategy 1: Use Chrome cookies
+        {**ydl_opts, "cookiesfrombrowser": ("chrome",)},
+        # Strategy 2: Use Firefox cookies as fallback
+        {**ydl_opts, "cookiesfrombrowser": ("firefox",)},
+        # Strategy 3: Use Edge cookies as fallback
+        {**ydl_opts, "cookiesfrombrowser": ("edge",)},
+        # Strategy 4: No cookies but with different user agent
+        {**{k: v for k, v in ydl_opts.items() if k != "cookiesfrombrowser"}, 
+         "http_headers": {"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}},
+        # Strategy 5: Minimal options as last resort
+        {
+            "outtmpl": video_template,
+            "format": "best",
+            "merge_output_format": "mp4",
+            "http_headers": {"User-Agent": "yt-dlp/2023.12.30"}
+        }
+    ]
+    
+    for i, strategy in enumerate(strategies, 1):
+        try:
+            print(f"Attempting download strategy {i}/5...")
+            with yt_dlp.YoutubeDL(strategy) as ydl:
+                result = ydl.extract_info(link, download=False)
+                video_title = sanitize_filename(result.get("title", "unknown"))
+                mp4_file_path = os.path.join(video_folder, f"{video_title}.mp4")
+                
+                # Skip if video already exists
+                if os.path.exists(mp4_file_path):
+                    print(f"MP4 file already exists, skipping download: {mp4_file_path}")
+                    return
+                
+                # Download the video
+                print(f"Downloading video: {link}")
+                result = ydl.extract_info(link, download=True)
+                downloaded_file = ydl.prepare_filename(result)
+                
+                # Check if re-encoding is needed
+                if not downloaded_file.endswith(".mp4"):
+                    reencode_to_mp4(downloaded_file, mp4_file_path, ffmpeg_path)
+                else:
+                    os.rename(downloaded_file, mp4_file_path)
+                
+                # Extract audio to MP3
+                extract_audio_to_mp3(mp4_file_path, audio_folder, ffmpeg_path)
+                download_success = True
+                print(f"Successfully downloaded using strategy {i}")
+                break
+                
+        except Exception as e:
+            error_msg = str(e).lower()
+            print(f"Strategy {i} failed: {str(e).split('[0;31m')[0] if '[0;31m' in str(e) else str(e)}")
+            
+            # If it's a bot detection error, try next strategy immediately
+            if any(keyword in error_msg for keyword in ['bot', 'sign in', 'cookies', 'authentication']):
+                continue
+            # If it's an unsupported URL, skip all strategies
+            elif 'unsupported url' in error_msg:
+                raise e
+            # For other errors, try next strategy
+            else:
+                continue
+    
+    if not download_success:
+        raise Exception("All download strategies failed. Video may require manual intervention or be unavailable.")
 def display_ascii_logo():
     """Display ASCII art logo when the program starts."""
     print(r"""
