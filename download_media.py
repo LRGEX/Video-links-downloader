@@ -1,0 +1,251 @@
+import os
+import urllib.request
+import zipfile
+import subprocess
+import yt_dlp
+import sys
+import re
+import shutil
+import time
+
+def sanitize_filename(filename):
+    """Sanitize filenames by removing or replacing invalid characters."""
+    return re.sub(r'[<>:"/\\|?*]', '_', filename)
+
+def sanitize_youtube_link(link):
+    """Sanitize YouTube links by removing unnecessary parameters."""
+    # Check if it's a YouTube link
+    if "youtube.com/watch" in link or "youtu.be/" in link:
+        # Extract the video ID 
+        if "youtube.com/watch" in link:
+            # For standard YouTube URLs
+            video_id = re.search(r'v=([^&]+)', link)
+            if video_id:
+                return f"https://youtube.com/watch?v={video_id.group(1)}"
+        elif "youtu.be/" in link:
+            # For shortened YouTube URLs
+            video_id = re.search(r'youtu\.be/([^?&]+)', link) 
+            if video_id:
+                return f"https://youtube.com/watch?v={video_id.group(1)}"
+    
+    # Return original link if it doesn't match patterns or something went wrong
+    return link
+
+def get_base_dir():
+    """Get the base directory of the script, whether it's run as .py or .exe."""
+    if getattr(sys, 'frozen', False):  # Check if the script is running as an .exe
+        return os.path.dirname(sys.executable)
+    else:
+        return os.path.dirname(os.path.abspath(__file__))
+
+def get_ffmpeg_path():
+    """Get the path to FFmpeg, checking locally and in the system PATH."""
+    base_dir = get_base_dir()
+    local_ffmpeg = os.path.join(base_dir, "ffmpeg.exe")
+    if os.path.exists(local_ffmpeg):
+        print("Using FFmpeg found locally.")
+        return local_ffmpeg
+    # Check if FFmpeg is available globally in PATH
+    try:
+        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        print("Using FFmpeg found in system PATH.")
+        return "ffmpeg"
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        pass
+    # FFmpeg not found, download it
+    print("FFmpeg not found locally or in PATH. Downloading it now...")
+    return download_ffmpeg()
+
+def download_ffmpeg():
+    """Download FFmpeg if it's not available locally or globally."""
+    base_dir = get_base_dir()
+    ffmpeg_path = os.path.join(base_dir, "ffmpeg.exe")
+    download_url = "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"
+    zip_path = os.path.join(base_dir, "ffmpeg.zip")
+    try:
+        urllib.request.urlretrieve(download_url, zip_path)
+        print("FFmpeg downloaded successfully.")
+        # Extract the FFmpeg binary
+        extract_dir = os.path.join(base_dir, "ffmpeg_temp")
+        os.makedirs(extract_dir, exist_ok=True)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(extract_dir)
+        # Locate the ffmpeg.exe file
+        for root, dirs, files in os.walk(extract_dir):
+            if 'ffmpeg.exe' in files:
+                extracted_ffmpeg_path = os.path.join(root, 'ffmpeg.exe')
+                os.rename(extracted_ffmpeg_path, ffmpeg_path)
+                print("FFmpeg installed successfully.")
+                break
+        else:
+            raise FileNotFoundError("Failed to locate ffmpeg.exe in the extracted files.")
+        # Cleanup
+        os.remove(zip_path)
+        shutil.rmtree(extract_dir)
+        return ffmpeg_path
+    except Exception as e:
+        print(f"An error occurred while downloading or extracting FFmpeg: {e}")
+        print("Please download FFmpeg manually from:")
+        print("https://github.com/BtbN/FFmpeg-Builds/releases/latest/")
+        print("After downloading, place 'ffmpeg.exe' in the same folder as this script.")
+        raise RuntimeError("Unable to download or extract FFmpeg.")
+
+def detect_encoder(ffmpeg_path):
+    """Detect the best available encoder (NVIDIA, AMD, Intel, or CPU)."""
+    encoders_output = subprocess.run(
+        [ffmpeg_path, "-encoders"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    ).stdout.lower()
+    if "h264_nvenc" in encoders_output:
+        print("NVIDIA GPU detected. Using h264_nvenc.")
+        return "h264_nvenc"
+    elif "h264_amf" in encoders_output:
+        print("AMD GPU detected. Using h264_amf.")
+        return "h264_amf"
+    elif "h264_qsv" in encoders_output:
+        print("Intel GPU detected. Using h264_qsv.")
+        return "h264_qsv"
+    else:
+        print("No GPU detected. Falling back to CPU (libx264).")
+        return "libx264"
+
+def reencode_to_mp4(input_file, output_file, ffmpeg_path):
+    """Reencode a video to MP4 format with balanced settings."""
+    encoder = detect_encoder(ffmpeg_path)
+    
+    print(f"Reencoding {input_file} to {output_file} using {encoder}...")
+    
+    command = [
+        ffmpeg_path, "-y", "-i", input_file,
+        "-c:v", encoder, "-preset", "medium",  # Balanced preset
+        "-b:v", "2000k", "-maxrate", "4000k", "-bufsize", "8000k",  # Variable bitrate settings
+        "-g", "60",  # Keyframe interval for smooth playback
+        "-c:a", "aac", "-b:a", "128k",  # High-quality audio
+        output_file
+    ]
+    
+    # Add hardware acceleration flags if using GPU
+    if encoder in ["h264_nvenc", "h264_amf", "h264_qsv"]:
+        command.insert(1, "-hwaccel")
+        if encoder == "h264_nvenc":
+            command.insert(2, "cuda")
+        elif encoder == "h264_qsv":
+            command.insert(2, "qsv")
+        elif encoder == "h264_amf":
+            command.insert(2, "dxva2")  # AMD typically uses DirectX Video Acceleration
+    subprocess.run(command)
+    
+    if os.path.exists(output_file):
+        os.remove(input_file)  # Remove the original file
+    print(f"Reencoded file saved: {output_file}")
+
+def extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path):
+    """Extract audio as MP3 format."""
+    mp3_file_path = os.path.join(audio_folder, sanitize_filename(os.path.splitext(os.path.basename(file_path))[0]) + ".mp3")
+    if os.path.exists(mp3_file_path):
+        print(f"MP3 file already exists, skipping extraction: {mp3_file_path}")
+        return mp3_file_path
+    print(f"Extracting audio from {file_path} to {mp3_file_path}...")
+    subprocess.run(
+        [
+            ffmpeg_path, "-y",
+            "-i", file_path,
+            "-q:a", "0", "-map", "a",
+            mp3_file_path
+        ]
+    )
+    print(f"Audio extraction completed: {mp3_file_path}")
+    return mp3_file_path
+
+def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="Audio", log_file="error_log.txt"):
+    """Download videos and ensure only MP4 and MP3 files in respective folders."""
+    os.makedirs(video_folder, exist_ok=True)
+    os.makedirs(audio_folder, exist_ok=True)
+    failed_links = []
+    # Ensure FFmpeg is available
+    ffmpeg_path = get_ffmpeg_path()
+    # Read the list of links
+    with open(links_file, "r", encoding="utf-8") as file:
+        links = file.readlines()
+    for link in links:
+        link = link.strip()
+        if not link:
+            continue
+        # Clean YouTube link by removing extra parameters
+        sanitized_link = sanitize_youtube_link(link)
+        print(f"Processing: {sanitized_link}")
+        try:
+            download_video(sanitized_link, video_folder, audio_folder, ffmpeg_path)
+        except Exception as e:
+            reason = str(e).split("\n")[0]
+            failed_links.append(
+                f"Link: {link}\nReason: {reason}\n\n-----------------------------------------\n"
+            )
+            print(f"Failed to process {sanitized_link}: {reason}")
+            continue
+    if failed_links:
+        with open(log_file, "w", encoding="utf-8") as log:
+            log.write("Links that could not be processed:\n\n")
+            log.write("\n".join(failed_links))
+        print(f"Log file created: {log_file}")
+    print("All downloads are complete!")
+
+def download_video(link, video_folder, audio_folder, ffmpeg_path):
+    """Download video and ensure only MP4 in Videos and MP3 in Audio."""
+    video_template = os.path.join(video_folder, sanitize_filename("%(title)s.%(ext)s"))
+    # Adjust yt_dlp options to prioritize MP4
+    ydl_opts = {
+        "outtmpl": video_template,
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "merge_output_format": "mp4",  # Ensure merged output is MP4
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        result = ydl.extract_info(link, download=False)
+        video_title = sanitize_filename(result.get("title", "unknown"))
+        mp4_file_path = os.path.join(video_folder, f"{video_title}.mp4")
+        # Skip if video already exists
+        if os.path.exists(mp4_file_path):
+            print(f"MP4 file already exists, skipping download: {mp4_file_path}")
+            return
+        # Download the video
+        print(f"Downloading video: {link}")
+        result = ydl.extract_info(link, download=True)
+        downloaded_file = ydl.prepare_filename(result)
+        # Check if re-encoding is needed
+        if not downloaded_file.endswith(".mp4"):
+            reencode_to_mp4(downloaded_file, mp4_file_path, ffmpeg_path)
+        else:
+            os.rename(downloaded_file, mp4_file_path)
+        # Extract audio to MP3
+        extract_audio_to_mp3(mp4_file_path, audio_folder, ffmpeg_path)
+def display_ascii_logo():
+    """Display ASCII art logo when the program starts."""
+    print(r"""
+    __    ____  _____________  __
+   / /   / __ \/ ____/ ____/ |/ /
+  / /   / /_/ / / __/ __/  |   / 
+ / /___/ _, _/ /_/ / /___ /   |  
+/_____/_/ |_|\____/_____//_/|_| 
+                                              
+    YouTube Downloader - v2.6
+    """)
+    print("=" * 60)        
+
+if __name__ == "__main__":
+    display_ascii_logo() 
+    # wait 3 seconds before starting
+    time.sleep(3)
+    base_dir = get_base_dir()
+    video_folder = os.path.join(base_dir, "Videos")
+    audio_folder = os.path.join(base_dir, "Audio")
+    links_file = os.path.join(base_dir, "links.txt")
+    try:
+        if not os.path.exists(links_file):
+            raise FileNotFoundError(f"Required file 'links.txt' not found in {base_dir}")
+        download_videos_and_audio(links_file, video_folder, audio_folder)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        input("\nPress Enter to exit...")

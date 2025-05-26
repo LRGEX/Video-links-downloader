@@ -1,0 +1,11 @@
+[project]
+name = "video-links-downloader"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyinstaller>=6.13.0",
+    "pywin32>=310",
+    "yt-dlp>=2025.5.22",
+]
