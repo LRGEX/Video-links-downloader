@@ -378,7 +378,7 @@ def display_ascii_logo():
  / /___/ _, _/ /_/ / /___ /   |  
 /_____/_/ |_|\____/_____//_/|_| 
                                 """)
-    print(f"YouTube Downloader - {YELLOW}v3.7{RESET} {GREEN}(Mega Support + Autobot Detection){RESET}")
+    print(f"YouTube Downloader - {YELLOW}v3.8{RESET} {GREEN}(Mega Support + Autobot Detection){RESET}")
     print("=" * 60)
 
 def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
