@@ -1,123 +1,209 @@
+# LRGEX Video Downloader v3.8
 
-# Video and Audi## Requirements
-1. **Python 3.10+**
-2. **FFmpeg**: Used for video conversion and audio extraction
-3. **yt-dlp**: For downloading videos from YouTube, TikTok, and other platforms
+A powerful Python application for downloading videos and extracting audio from multiple platforms including YouTube, TikTok, and MEGA.nz. The application automatically organizes downloads into separate folders and provides advanced features like anti-bot detection and hardware acceleration.
 
-## Installation
+## ✨ Features
 
-### Option 1: Using UV Package Manager (Recommended)
-1. Clone or download this repository
-2. Install UV package manager if you don't have it:
-   ```pwsh
-   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-   ```
-3. Install dependencies:
-   ```pwsh
-   uv sync
-   ```
+- **🌐 Multi-Platform Support**: Download from YouTube, TikTok, and MEGA.nz
+- **🛡️ Anti-Bot Detection**: 5 fallback strategies with browser cookie extraction (Chrome/Firefox/Edge)
+- **📹 Video Downloads**: Automatically downloads videos in MP4 format
+- **🎵 Audio Extraction**: Extracts audio from downloaded videos in MP3 format
+- **📁 Smart Organization**: Automatically organizes files into `Videos` and `Audio` folders
+- **⏭️ Skip Existing Files**: Intelligently skips files that already exist
+- **📝 Error Logging**: Comprehensive error logging in `error_log.txt`
+- **🎨 Enhanced Interface**: Colored ASCII logo and user-friendly prompts
+- **⚡ Hardware Acceleration**: GPU-accelerated encoding (NVIDIA/AMD/Intel)
+- **🔄 Auto-Cleanup**: Automatically organizes misplaced audio files
 
+## 🔧 Requirements
 
-   
+- **Python 3.10+**
+- **FFmpeg**: For video conversion and audio extraction
+- **UV Package Manager**: Modern Python package and project manager
 
-### FFmpeg Installation
-- The script automatically downloads FFmpeg if it's missing on **Windows**
-- On **Linux/Mac**, install FFmpeg using your package manager:
-  ```bash
-  sudo apt install ffmpeg   # For Debian/Ubuntu
-  brew install ffmpeg       # For macOS
-  ```
-This Python script allows you to download videos and extract their audio from YouTube, TikTok, and MEGA.nz links. The videos are saved in the MP4 format in a `Videos` folder, while the audio is extracted and saved in MP3 format in an `Audio` folder.
+## 📦 Installation
 
-## Features
-- **Multi-Platform Support**: Downloads from YouTube, TikTok, and MEGA.nz
-- **Anti-Bot Detection**: 5 fallback strategies with browser cookie extraction (Chrome/Firefox/Edge)
-- **Download Videos**: Automatically downloads videos in MP4 format
-- **Extract Audio**: Extracts audio from downloaded videos in MP3 format
-- **Format Compatibility**: Ensures videos are always in MP4 format and audio in MP3 format
-- **Auto-Cleanup**: Automatically organizes misplaced audio files
-- **Skip Existing Files**: Skips downloading if files already exist
-- **Error Logging**: Logs failed downloads in `error_log.txt` file
-- **Colored ASCII Logo**: Enhanced visual interface
-- **Hardware Acceleration**: GPU-accelerated encoding (NVIDIA/AMD/Intel)
+### 1. Install UV Package Manager
+If you don't have UV installed, install it first:
 
-## Requirements
-1. **Python 3.6+**
-2. **FFmpeg**: Used for video conversion and audio extraction.
-3. **yt-dlp**: For downloading videos and audio from YouTube, TikTok, and other platforms.
-
-## Installation
-1. Clone or download this repository.
-2. sync the required Python libraries:
-   ```pwsh
-   uv sync
-   ```
-3. Install FFmpeg:
-   - The script automatically installs FFmpeg if it’s missing on **Windows**.
-   - On **Linux/Mac**, install FFmpeg using your package manager:
-     ```bash
-     sudo apt install ffmpeg   # For Debian/Ubuntu
-     brew install ffmpeg       # For macOS
-     ```
-
-## How to Use
-1. Create a file named `links.txt` in the script directory
-2. Add your YouTube, TikTok, and MEGA.nz links to `links.txt` (one link per line)
-
-### Example `links.txt`
-```
-https://youtube.com/watch?v=example1
-https://vt.tiktok.com/example2
-https://mega.nz/file/example3
-https://youtube.com/watch?v=example4
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-3. Run the script:
-   ```bash
-   # Option 1: Use the executable (recommended)
-   ./VideoDownloader.exe
-   
-   # Option 2: Run Python script directly
-   python download_media.py
-   
-   # Option 3: Using UV
-   uv run python download_media.py
-   ```
+**macOS/Linux:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-## Output
-- **Videos Folder**: All downloaded videos are saved in the `Videos` folder in MP4 format
-- **Audio Folder**: Extracted audio files are saved in the `Audio` folder in MP3 format
-- **Error Log**: Any links that fail to process are logged in `error_log.txt` with the reason for failure
+### 2. Clone the Repository
+```bash
+git clone <repository-url>
+cd video-downloader
+```
 
-## Building Executable
+### 3. Install Dependencies
+```bash
+uv sync
+```
 
-To create your own executable file using PyInstaller:
+This will automatically install all required dependencies:
+- `yt-dlp`: For YouTube and TikTok downloads
+- `requests`: For HTTP requests
+- `mega.py`: For MEGA.nz downloads
 
-```pwsh
-# Install PyInstaller if not already installed
+### 4. FFmpeg Installation
+- **Windows**: The script automatically downloads FFmpeg if missing
+- **Linux**: `sudo apt install ffmpeg` (Debian/Ubuntu) or equivalent
+- **macOS**: `brew install ffmpeg`
+
+## 🚀 Usage
+
+### 1. Prepare Your Links
+Create a file named `links.txt` in the script directory and add your video links (one per line):
+
+```txt
+https://youtube.com/watch?v=dQw4w9WgXcQ
+https://vt.tiktok.com/ZSjQpFGHq/
+https://mega.nz/file/ABC123XY#secretkey
+https://youtube.com/watch?v=oHg5SJYRHA0
+```
+
+### 2. Run the Application
+
+**Option 1: Using the pre-built executable (Recommended)**
+```bash
+./LRGEX_Video_Downloader_v3.8.exe
+```
+
+**Option 2: Run with UV**
+```bash
+uv run python download_media.py
+```
+
+**Option 3: Traditional Python execution**
+```bash
+python download_media.py
+```
+
+## 📂 Output Structure
+
+The application creates the following directory structure:
+
+```
+project-directory/
+├── Videos/           # Downloaded MP4 videos
+├── Audio/            # Extracted MP3 audio files
+├── links.txt         # Your input file with video links
+├── error_log.txt     # Failed downloads log
+└── download_media.py # Main application script
+```
+
+## 🛠️ Building Executable
+
+To create your own executable using PyInstaller:
+
+### 1. Install PyInstaller
+```bash
 uv add pyinstaller
-
-# Create executable with custom icon
-pyinstaller --onefile --icon="E:\LRG\Ezme-LRG Cloud\Evolv-Ezmex\LRG-EX Projects\Brand\Logos\Ico\bigx-dark-icon.ico" --name="LRGEX Video Downloader v3.8" download_media.py
-
-
-
 ```
 
-**PyInstaller flags explained:**
-- `--onefile`: Creates a single executable file
-- `--icon`: Embeds custom icon (optional)
-- `--name`: Sets the executable name
-- `--hidden-import=yt_dlp`: Ensures yt-dlp dynamic imports are included
+### 2. Build the Executable
+```bash
+# Basic build
+pyinstaller --onefile --name="LRGEX Video Downloader v3.8" download_media.py
 
-## Notes
-- The script automatically downloads FFmpeg if not found on Windows
-- Files that already exist in `Videos` or `Audio` folders are automatically skipped
-- MEGA downloads use yt-dlp as primary method with automatic fallback
-- Browser cookies are automatically used for anti-bot detection
-- GPU acceleration is automatically detected and used when available
+# With custom icon and optimizations
+pyinstaller --onefile \
+    --exclude-module=pathlib \
+    --icon="path/to/your/icon.ico" \
+    --name="LRGEX Video Downloader v3.8" \
+    download_media.py
+```
+
+### PyInstaller Options Explained:
+- `--onefile`: Creates a single executable file
+- `--exclude-module=pathlib`: Resolves MEGA.py compatibility issues
+- `--icon`: Embeds a custom icon (optional)
+- `--name`: Sets the executable name
+
+## 🔧 Configuration
+
+### Supported Platforms
+| Platform | Support | Notes |
+|----------|---------|--------|
+| YouTube | ✅ Full | Includes shorts, playlists, live streams |
+| TikTok | ✅ Full | Direct video downloads |
+| MEGA.nz | ✅ Full | Direct file downloads |
+
+### Hardware Acceleration
+The application automatically detects and uses available hardware acceleration:
+- **NVIDIA**: NVENC encoding
+- **AMD**: AMF encoding  
+- **Intel**: Quick Sync Video
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**1. "Unsupported URL" Error**
+- Ensure the URL is from a supported platform
+- Check if the video is private or geo-restricted
+
+**2. FFmpeg Not Found**
+- On Windows: The script auto-downloads FFmpeg
+- On Linux/Mac: Install manually using package manager
+
+**3. MEGA Download Fails**
+- Check if the MEGA link is valid and accessible
+- Ensure sufficient disk space
+
+**4. Build Errors with PyInstaller**
+- Use `--exclude-module=pathlib` flag for MEGA.py compatibility
+- Ensure all dependencies are properly installed
+
+### Error Logging
+All failed downloads are logged in `error_log.txt` with detailed error messages for debugging.
+
+## 📝 Dependencies
+
+This project uses UV for dependency management. Dependencies are defined in `pyproject.toml`:
+
+```toml
+[project]
+dependencies = [
+    "yt-dlp>=2023.1.6",
+    "requests>=2.28.0",
+    "mega.py>=1.0.8"
+]
+```
+
+## 🔄 Version History
+
+- **v3.8**: Added MEGA.py integration, fixed PyInstaller compatibility
+- **v3.7**: Enhanced error handling, improved UI
+- **v3.6**: Added hardware acceleration support
+- **v3.5**: Multi-platform support implementation
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📞 Support
+
+For support and questions:
+- Create an issue on GitHub
+- Check the troubleshooting section above
+- Review the error logs in `error_log.txt`
 
 ---
 
-
-**Developed by LRGEX**
+**Developed by LRGEX** | *Empowering digital content management*
