@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Double prompt issue in main function
 - MEGA download reliability improvements
 
-## [3.7.0] - 2025-05-XX
+## [3.7.0] - 2024-02-20
 
 ### Added
 - Multi-strategy anti-bot detection
