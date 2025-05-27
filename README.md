@@ -24,6 +24,7 @@
    ```bash
    pip install yt-dlp requests beautifulsoup4 lxml pycryptodome pywin32
    ```
+   
 
 ### FFmpeg Installation
 - The script automatically downloads FFmpeg if it's missing on **Windows**
