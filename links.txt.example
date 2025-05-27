@@ -1,0 +1,14 @@
+# LRGEX Video Downloader - Sample Links File
+# 
+# Instructions:
+# 1. Replace these example links with your actual video URLs
+# 2. Add one URL per line
+# 3. Supported platforms: YouTube, TikTok, MEGA.nz
+# 4. Remove the '#' symbol before each URL to activate them
+#
+# Example links (remove # to use):
+# https://youtube.com/watch?v=dQw4w9WgXcQ
+# https://vt.tiktok.com/ZSjQpFGHq/
+# https://mega.nz/file/ABC123XY#secretkey
+#
+# Add your video links below this line:

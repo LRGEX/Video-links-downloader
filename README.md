@@ -2,6 +2,17 @@
 
 A powerful Python application for downloading videos and extracting audio from multiple platforms including YouTube, TikTok, and MEGA.nz. The application automatically organizes downloads into separate folders and provides advanced features like anti-bot detection and hardware acceleration.
 
+## ⚠️ Important Legal Notice
+
+**This tool is for educational and personal use only.**
+
+- ✅ **Respect Copyright**: Only download content you own or have permission to download
+- ✅ **Follow Platform Terms**: Comply with YouTube, TikTok, and MEGA.nz terms of service
+- ✅ **Personal Use**: This tool is intended for personal, non-commercial use
+- ✅ **Fair Use**: Ensure your usage complies with fair use and local copyright laws
+
+**LRGEX is not responsible for misuse of this software. Users are solely responsible for ensuring their usage complies with applicable laws and platform terms of service.**
+
 ## ✨ Features
 
 - **🌐 Multi-Platform Support**: Download from YouTube, TikTok, and MEGA.nz
@@ -62,12 +73,21 @@ This will automatically install all required dependencies:
 ### 1. Prepare Your Links
 Create a file named `links.txt` in the script directory and add your video links (one per line):
 
+```bash
+# Copy the example file and edit it
+cp links.txt.example links.txt
+# Edit links.txt with your video URLs
+```
+
+**Example `links.txt` content:**
 ```txt
 https://youtube.com/watch?v=dQw4w9WgXcQ
 https://vt.tiktok.com/ZSjQpFGHq/
 https://mega.nz/file/ABC123XY#secretkey
 https://youtube.com/watch?v=oHg5SJYRHA0
 ```
+
+⚠️ **Privacy Note**: Never commit your `links.txt` file to version control as it may contain private URLs.
 
 ### 2. Run the Application
 

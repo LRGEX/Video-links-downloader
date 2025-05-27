@@ -1,7 +1,7 @@
 """
-YouTube Video/Audio Downloader Script v3.7 (Complete Single File with Auto-Cleanup)
-=========================================
-Enhanced anti-bot detection for YouTube with improved MEGA.nz support
+LRGEX Video Downloader v3.8
+===========================
+Multi-platform video downloader with enhanced MEGA.nz support
 
 Features:
 - Multi-strategy anti-bot detection (5 fallback methods) ✅ WORKING

@@ -1,20 +1,109 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller specific
+*.manifest
+*.spec
 build/
 dist/
-wheels/
-*.egg-info
+
+# Project working files
 working.py
+
+# User content - KEEP PRIVATE
 links.txt
+personal_links.txt
+test_links.txt
+test_problem_links.txt
+cookies.txt
+
+# Downloaded content - KEEP PRIVATE
 Audio/
 Videos/
-test_problem_links.txt
-test_links.txt
+downloads/
+
+# Logs and temporary files
 error_log.txt
-LRGEX Video Downloader v3.8.spec
+*.log
+*.tmp
+*.temp
+temp/
+tmp/
+
 # FFmpeg binary (downloaded automatically by the script)
 ffmpeg.exe
+ffmpeg/
 
 # Virtual environments
 .venv
+.env
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Executables and binaries
+*.exe
+*.zip
+*.tar.gz
+*.dmg
+
+# Sensitive configuration
+config.ini
+secrets.json
+.env.local
+.env.production
