@@ -132,7 +132,7 @@ uv run pyinstaller --onefile --icon="path/to/your/icon.ico" --name="VideoDownloa
 - **Source Code**: Available in this repository
 
 ## Version History
-- **v3.7**: Added colored ASCII logo, removed MEGA.py conflicts, improved PyInstaller compatibility
+- **v3.8**: Added colored ASCII logo, removed MEGA.py conflicts, improved PyInstaller compatibility
 - **v3.6**: Enhanced anti-bot detection, browser cookie support
 - **v3.5**: Added MEGA.nz support, auto-cleanup features
 - **Earlier versions**: Basic YouTube/TikTok downloading
