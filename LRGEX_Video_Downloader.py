@@ -4,12 +4,12 @@ LRGEX Video Downloader v3.8
 Multi-platform video downloader with enhanced MEGA.nz support
 
 Features:
-- Multi-strategy anti-bot detection (5 fallback methods) ✅ WORKING
-- Browser cookie extraction (Chrome/Firefox/Edge) ✅ WORKING
-- MEGA.nz file download via mega.py library ✅ WORKING
-- Automatic file organization (MP4 videos, MP3 audio) ✅ WORKING
-- Robust error handling and logging ✅ WORKING
-- Automatic cleanup of misplaced audio files ✅ WORKING
+- Multi-strategy anti-bot detection (5 fallback methods)
+- Browser cookie extraction (Chrome/Firefox/Edge)
+- MEGA.nz file download via mega.py library
+- Automatic file organization (MP4 videos, MP3 audio)
+- Robust error handling and logging
+- Automatic cleanup of misplaced audio files
 
 Dependencies: yt-dlp, requests, mega.py
 """
@@ -250,7 +250,7 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
                 # For MEGA links, check if the file was actually downloaded despite the error
                 mega_files = [f for f in os.listdir(video_folder) if f.endswith(('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'))]
                 if mega_files:
-                    print("✅ MEGA file downloaded successfully (ignoring temporary file access error)")
+                    print(" MEGA file downloaded successfully (ignoring temporary file access error)")
                     continue
                 else:
                     print(f"❌ MEGA download failed: {error_msg}")
@@ -416,7 +416,7 @@ def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
             # Check if files were actually downloaded successfully
             video_files = [f for f in os.listdir(video_folder) if f.endswith(('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'))]
             if video_files:
-                print(f"✅ MEGA download successful despite temporary file access warning")
+                print(f" MEGA download successful despite temporary file access warning")
                 return video_files[0]  # Return the downloaded file
         
         print(f"❌ MEGA download failed: {error_msg}")
@@ -525,7 +525,7 @@ def extract_missing_audio_files(video_folder, audio_folder, ffmpeg_path):
             missing_audio.append((file_path, filename, mp3_filename))
     
     if not missing_audio:
-        print("✅ All video files already have corresponding MP3 files!")
+        print(" All video files already have corresponding MP3 files!")
         return
     
     print(f"🎵 Found {len(missing_audio)} video(s) missing MP3 files. Extracting now...")
@@ -566,15 +566,15 @@ def cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path):
             
             if os.path.exists(mp3_path):
                 print(f"✓ MP3 already exists in Audio folder: {mp3_filename}")
-                print(f"🗑️ Removing duplicate from Videos folder...")
+                print(f"🗑 Removing duplicate from Videos folder...")
                 os.remove(file_path)
-                print(f"✅ Removed: {filename}")
+                print(f" Removed: {filename}")
             else:
                 print(f"🎵 Converting to MP3 and moving to Audio folder...")
                 extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path)
                 print(f"🗑️ Removing original from Videos folder...")
                 os.remove(file_path)
-                print(f"✅ Converted and moved: {filename} → {mp3_filename}")
+                print(f" Converted and moved: {filename} → {mp3_filename}")
                 
         except Exception as e:
             print(f"❌ Error processing {filename}: {e}")
@@ -590,10 +590,10 @@ if __name__ == "__main__":
     
     try:
         if not os.path.exists(links_file):
-            print(f"📝 Creating 'links.txt' file in {base_dir}")
+            print(f" Creating 'links.txt' file in {base_dir}")
             with open(links_file, "w", encoding="utf-8") as f:
                 f.write("# Add your video links here (one per line)\n")
-            print(f"✅ Created 'links.txt' with examples. Please add your links and run the program again.")
+            print(f" Created 'links.txt' with examples. Please add your links and run the program again.")
             input("\nPress Enter to exit...")
             sys.exit(0)
         
