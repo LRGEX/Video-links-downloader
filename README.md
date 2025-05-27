@@ -3,27 +3,21 @@
 1. **Python 3.10+**
 2. **FFmpeg**: Used for video conversion and audio extraction
 3. **yt-dlp**: For downloading videos from YouTube, TikTok, and other platforms
-4. **Additional dependencies**: requests, beautifulsoup4, lxml, pycryptodome, pywin32
 
 ## Installation
 
 ### Option 1: Using UV Package Manager (Recommended)
 1. Clone or download this repository
 2. Install UV package manager if you don't have it:
-   ```bash
-   pip install uv
+   ```pwsh
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
    ```
 3. Install dependencies:
-   ```bash
+   ```pwsh
    uv sync
    ```
 
-### Option 2: Using pip
-1. Clone or download this repository
-2. Install the required Python libraries:
-   ```bash
-   pip install yt-dlp requests beautifulsoup4 lxml pycryptodome pywin32
-   ```
+
    
 
 ### FFmpeg Installation
@@ -54,9 +48,9 @@ This Python script allows you to download videos and extract their audio from Yo
 
 ## Installation
 1. Clone or download this repository.
-2. Install the required Python libraries:
-   ```bash
-   pip install yt-dlp
+2. sync the required Python libraries:
+   ```pwsh
+   uv sync
    ```
 3. Install FFmpeg:
    - The script automatically installs FFmpeg if it’s missing on **Windows**.
@@ -99,12 +93,12 @@ https://youtube.com/watch?v=example4
 
 To create your own executable file using PyInstaller:
 
-```bash
+```pwsh
 # Install PyInstaller if not already installed
-pip install pyinstaller
+uv add pyinstaller
 
 # Create executable with custom icon
-pyinstaller --onefile --icon="E:\LRG\Ezme-LRG Cloud\Evolv-Ezmex\LRG-EX Projects\Brand\Logos\Ico\bigx-dark-icon.ico" --name="LRGEX Video Downloader v3.8" --hidden-import=yt_dlp --hidden-import=mega --exclude-module=pathlib download_media.py
+pyinstaller --onefile --icon="E:\LRG\Ezme-LRG Cloud\Evolv-Ezmex\LRG-EX Projects\Brand\Logos\Ico\bigx-dark-icon.ico" --name="LRGEX Video Downloader v3.8" download_media.py
 
 
 
@@ -126,4 +120,4 @@ pyinstaller --onefile --icon="E:\LRG\Ezme-LRG Cloud\Evolv-Ezmex\LRG-EX Projects\
 ---
 
 
-**Developed by Hesham M. Alahdal**
+**Developed by LRGEX**
