@@ -98,12 +98,12 @@ https://youtube.com/watch?v=oHg5SJYRHA0
 
 **Option 2: Run with UV**
 ```bash
-uv run python download_media.py
+uv run python LRGEX_Video_Downloader.py
 ```
 
 **Option 3: Traditional Python execution**
 ```bash
-python download_media.py
+python LRGEX_Video_Downloader.py
 ```
 
 ## 📂 Output Structure
@@ -116,7 +116,7 @@ project-directory/
 ├── Audio/            # Extracted MP3 audio files
 ├── links.txt         # Your input file with video links
 ├── error_log.txt     # Failed downloads log
-└── download_media.py # Main application script
+└── LRGEX_Video_Downloader.py # Main application script
 ```
 
 ## 🛠️ Building Executable
@@ -131,14 +131,14 @@ uv add pyinstaller
 ### 2. Build the Executable
 ```bash
 # Basic build
-pyinstaller --onefile --name="LRGEX Video Downloader v3.8" download_media.py
+pyinstaller --onefile --name="LRGEX Video Downloader v3.8" LRGEX_Video_Downloader.py
 
 # With custom icon and optimizations
 pyinstaller --onefile \
     --exclude-module=pathlib \
     --icon="path/to/your/icon.ico" \
     --name="LRGEX Video Downloader v3.8" \
-    download_media.py
+    LRGEX_Video_Downloader.py
 ```
 
 ### PyInstaller Options Explained:
