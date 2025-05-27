@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://download.lrgex.com/Dark%20Full%20Logo.png" alt="Logo" width="400" height="100">
 </p>
-# LRGEX Video Downloader v3.8
+<center>#LRGEX Video Downloader v3.8</center>
 
 A powerful Python application for downloading videos and extracting audio from multiple platforms including YouTube, TikTok, and MEGA.nz. The application automatically organizes downloads into separate folders and provides advanced features like anti-bot detection and hardware acceleration.
 
