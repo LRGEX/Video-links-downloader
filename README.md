@@ -125,14 +125,5 @@ pyinstaller --onefile --icon="E:\LRG\Ezme-LRG Cloud\Evolv-Ezmex\LRG-EX Projects\
 
 ---
 
-## Download Links
-- **Latest Release**: [VideoDownloader.exe](https://mega.nz/file/VxE1SCIC#s7iIWBiumPNVPBAA_-q3FNGF5pIiN4qXtYcKdGOYWco)
-- **Source Code**: Available in this repository
-
-## Version History
-- **v3.8**: Added colored ASCII logo, removed MEGA.py conflicts, improved PyInstaller compatibility
-- **v3.6**: Enhanced anti-bot detection, browser cookie support
-- **v3.5**: Added MEGA.nz support, auto-cleanup features
-- **Earlier versions**: Basic YouTube/TikTok downloading
 
 **Developed by Hesham M. Alahdal**
