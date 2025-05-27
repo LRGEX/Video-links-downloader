@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://download.lrgex.com/Dark%20Full%20Logo.png" alt="Logo" width="400" height="100">
-  #LRGEX Video Downloader v3.8
+  
 </p>
  
 
