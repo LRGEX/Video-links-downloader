@@ -3,9 +3,14 @@ name = "video-links-downloader"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
+    "beautifulsoup4>=4.13.4",
+    "lxml>=5.4.0",
+    "mega-py>=1.0.8",
+    "pycryptodome>=3.23.0",
     "pyinstaller>=6.13.0",
     "pywin32>=310",
+    "requests>=2.32.3",
     "yt-dlp>=2025.5.22",
 ]
