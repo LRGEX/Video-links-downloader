@@ -58,6 +58,6 @@ https://youtube.com/watch?v=example3
 
 ---
 ## Link to Download the script
-https://mega.nz/file/VxE1SCIC#s7iIWBiumPNVPBAA_-q3FNGF5pIiN4qXtYcKdGOYWco
+[LRGEX Video Downloader](https://github.com/LRGEX/Video-links-downloader/releases/download/v3.8/LRGEX.Video.Downloader.v3.8.exe)
 
 **Developed by Hesham M. Alahdal**
