@@ -2,7 +2,7 @@
   <img src="https://download.lrgex.com/Dark%20Full%20Logo.png" alt="Logo" width="400" height="100">
   
 </p>
-<h1 align="center">LRGEX Video Downloader v3.8</h1>
+<h1 align="center">LRGEX Video Downloader v3.9</h1>
 
  
 
@@ -19,6 +19,14 @@ A powerful Python application for downloading videos and extracting audio from m
 
 **LRGEX is not responsible for misuse of this software. Users are solely responsible for ensuring their usage complies with applicable laws and platform terms of service.**
 
+## 🆕 What's New in v3.9
+
+- **🔧 Enhanced URL Processing**: Fixed critical issue with malformed YouTube URLs containing double question marks (e.g., `?v=VIDEO_ID?feature=shared`)
+- **⚡ Improved Download Success**: Removed restrictive format specifications, allowing yt-dlp to automatically select the best available formats
+- **🛠️ Better Error Handling**: Advanced regex patterns for robust URL sanitization and validation
+- **📦 Optimized Dependencies**: Resolved pathlib conflicts and updated yt-dlp for better compatibility
+- **🎯 Custom Executable**: Enhanced PyInstaller support with custom icon integration
+
 ## ✨ Features
 
 - **🌐 Multi-Platform Support**: Download from YouTube, TikTok, and MEGA.nz
@@ -30,7 +38,9 @@ A powerful Python application for downloading videos and extracting audio from m
 - **📝 Error Logging**: Comprehensive error logging in `error_log.txt`
 - **🎨 Enhanced Interface**: Colored ASCII logo and user-friendly prompts
 - **⚡ Hardware Acceleration**: GPU-accelerated encoding (NVIDIA/AMD/Intel)
-- **🔄 Auto-Cleanup**: Automatically organizes misplaced audio files
+- **🔗 Enhanced URL Handling**: Robust malformed URL detection and sanitization
+- **🛠️ Improved Compatibility**: Advanced regex patterns for various YouTube URL formats
+- **⚡ Optimized Downloads**: Automatic format selection for better success rates
 
 ## 🔧 Requirements
 
@@ -99,7 +109,7 @@ https://youtube.com/watch?v=oHg5SJYRHA0
 
 **Option 1: Using the pre-built executable (Recommended)**
 ```bash
-./LRGEX_Video_Downloader_v3.8.exe
+./LRGEX_Video_Downloader_v3.9.exe
 ```
 
 **Option 2: Run with UV**
@@ -137,13 +147,13 @@ uv add pyinstaller
 ### 2. Build the Executable
 ```bash
 # Basic build
-pyinstaller --onefile --name="LRGEX Video Downloader v3.8" LRGEX_Video_Downloader.py
+pyinstaller --onefile --name="LRGEX Video Downloader v3.9" LRGEX_Video_Downloader.py
 
 # With custom icon and optimizations
 pyinstaller --onefile \
     --exclude-module=pathlib \
     --icon="path/to/your/icon.ico" \
-    --name="LRGEX Video Downloader v3.8" \
+    --name="LRGEX Video Downloader v3.9" \
     LRGEX_Video_Downloader.py
 ```
 
@@ -172,9 +182,11 @@ The application automatically detects and uses available hardware acceleration:
 
 ### Common Issues
 
-**1. "Unsupported URL" Error**
+**1. "Unsupported URL" or Malformed URL Error**
+- The application now handles malformed URLs with double question marks automatically
 - Ensure the URL is from a supported platform
 - Check if the video is private or geo-restricted
+- v3.9 includes enhanced URL sanitization for various YouTube formats
 
 **2. FFmpeg Not Found**
 - On Windows: The script auto-downloads FFmpeg
@@ -206,6 +218,7 @@ dependencies = [
 
 ## 🔄 Version History
 
+- **v3.9**: Enhanced URL handling, improved download compatibility, fixed malformed URL issues
 - **v3.8**: Added MEGA.py integration, fixed PyInstaller compatibility
 - **v3.7**: Enhanced error handling, improved UI
 - **v3.6**: Added hardware acceleration support

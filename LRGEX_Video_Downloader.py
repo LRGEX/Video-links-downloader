@@ -1,5 +1,5 @@
 """
-LRGEX Video Downloader v3.8
+LRGEX Video Downloader v3.9
 ===========================
 Multi-platform video downloader with enhanced MEGA.nz support
 
@@ -62,10 +62,28 @@ def sanitize_youtube_link(link):
     if "youtube.com/watch" in link or "youtu.be/" in link:
         # Extract the video ID 
         if "youtube.com/watch" in link:
-            # For standard YouTube URLs
-            video_id = re.search(r'v=([^&]+)', link)
-            if video_id:
-                return f"https://youtube.com/watch?v={video_id.group(1)}"
+            # Handle all possible URL malformations and patterns
+            # Fix common malformations: double ?, missing &, etc.
+            link_work = link
+            
+            # Fix double question marks
+            link_work = re.sub(r'\?\?+', '?', link_work)
+            
+            # Fix cases where parameters after v= use ? instead of &
+            link_work = re.sub(r'(\?v=[^&?]+)\?', r'\1&', link_work)
+            
+            # Extract video ID using multiple patterns to handle edge cases
+            patterns = [
+                r'[?&]v=([a-zA-Z0-9_-]{11})',  # Standard 11-char video ID
+                r'[?&]v=([a-zA-Z0-9_-]+)',     # Any length video ID
+                r'/watch\?v=([a-zA-Z0-9_-]+)', # Direct after /watch?
+            ]
+            
+            for pattern in patterns:
+                video_id = re.search(pattern, link_work)
+                if video_id:
+                    return f"https://youtube.com/watch?v={video_id.group(1)}"
+                    
         elif "youtu.be/" in link:
             # For shortened YouTube URLs
             video_id = re.search(r'youtu\.be/([^?&]+)', link)
@@ -294,26 +312,41 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
         "sleep_interval": 1,  # Add delay between requests
         "max_sleep_interval": 3,
         "ignoreerrors": False,  # We'll handle errors manually
-    }
-    
-    # Try multiple download strategies if the first one fails
+    }    # Try multiple download strategies if the first one fails
     download_success = False
     strategies = [
-        # Strategy 1: Use Chrome cookies
-        {**ydl_opts, "cookiesfrombrowser": ("chrome",)},
-        # Strategy 2: Use Firefox cookies as fallback
-        {**ydl_opts, "cookiesfrombrowser": ("firefox",)},
-        # Strategy 3: Use Edge cookies as fallback
-        {**ydl_opts, "cookiesfrombrowser": ("edge",)},
-        # Strategy 4: No cookies but with different user agent
-        {**{k: v for k, v in ydl_opts.items() if k != "cookiesfrombrowser"}, 
-         "http_headers": {"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}},
-        # Strategy 5: Minimal options as last resort
+        # Strategy 1: Let yt-dlp choose the best format automatically (most reliable)
         {
             "outtmpl": video_template,
-            "format": "best",
             "merge_output_format": "mp4",
-            "http_headers": {"User-Agent": "yt-dlp/2023.12.30"}
+            "http_headers": {"User-Agent": "yt-dlp/2024.12.13"}
+        },
+        # Strategy 2: Try specific video+audio combination
+        {
+            "outtmpl": video_template,
+            "format": "bestvideo+bestaudio/best",
+            "merge_output_format": "mp4",
+            "http_headers": {"User-Agent": "yt-dlp/2024.12.13"}
+        },
+        # Strategy 3: Use Chrome cookies with automatic format selection
+        {
+            "outtmpl": video_template,
+            "merge_output_format": "mp4",
+            "cookiesfrombrowser": ("chrome",),
+            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        },
+        # Strategy 4: Use Firefox cookies as fallback
+        {
+            "outtmpl": video_template,
+            "merge_output_format": "mp4",
+            "cookiesfrombrowser": ("firefox",),
+            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        },
+        # Strategy 5: Alternative user agent without cookies
+        {
+            "outtmpl": video_template,
+            "merge_output_format": "mp4",
+            "http_headers": {"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}
         }
     ]
     
@@ -378,7 +411,7 @@ def display_ascii_logo():
  / /___/ _, _/ /_/ / /___ /   |  
 /_____/_/ |_|\____/_____//_/|_| 
                                 """)
-    print(f"YouTube Downloader - {YELLOW}v3.8{RESET} {GREEN}(Mega Support + Autobot Detection){RESET}")
+    print(f"YouTube Downloader - {YELLOW}v3.9{RESET} {GREEN}(Mega Support + Autobot Detection){RESET}")
     print("=" * 60)
 
 def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
