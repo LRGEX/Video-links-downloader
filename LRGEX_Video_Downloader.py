@@ -46,6 +46,10 @@ def sanitize_youtube_link(link):
     """Sanitize YouTube links by removing unnecessary parameters and handle other platforms."""
     # Handle TikTok links
     if "tiktok.com" in link:
+        # Check for invalid discovery/browse pages
+        if any(invalid in link for invalid in ['/discover/', '/browse/', '/explore/', '/trending/']):
+            raise ValueError(f"❌ Invalid TikTok link: '{link}' is a browse/discovery page, not a video. Please use direct video links like: https://www.tiktok.com/@username/video/1234567890123456789")
+        
         # Extract video ID from TikTok links
         if "/video/" in link:
             video_id = re.search(r'/video/(\d+)', link)
@@ -232,8 +236,7 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
     
     # Clean up any misplaced audio files BEFORE processing new downloads
     cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path)
-    
-    # Read the list of links
+      # Read the list of links
     with open(links_file, "r", encoding="utf-8") as file:
         links = file.readlines()
     
@@ -247,11 +250,13 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
     
     for i, link in enumerate(unique_links, 1):
         link = link.strip()
-          # Clean YouTube link by removing extra parameters
-        sanitized_link = sanitize_youtube_link(link)
-        print(f"\nProcessing ({i}/{len(unique_links)}): {sanitized_link}")
+        print(f"\nProcessing ({i}/{len(unique_links)}): {link}")
         
         try:
+            # Clean YouTube link by removing extra parameters
+            sanitized_link = sanitize_youtube_link(link)
+            print(f"  → Sanitized: {sanitized_link}")
+            
             # Check if it's a MEGA link
             if "mega.nz" in sanitized_link.lower():
                 print("🔗 MEGA link detected - using mega.py library")
@@ -261,6 +266,13 @@ def download_videos_and_audio(links_file, video_folder="Videos", audio_folder="A
                 download_video(sanitized_link, video_folder, audio_folder, ffmpeg_path)
             # Small delay between downloads to be respectful to servers
             time.sleep(1)
+        except ValueError as ve:
+            # Handle validation errors (like invalid TikTok discovery pages)
+            print(f"❌ Validation Error: {ve}")
+            failed_links.append(
+                f"Link: {link}\nReason: {str(ve)}\n\n-----------------------------------------\n"
+            )
+            continue
         except Exception as e:
             # Handle MEGA-specific errors more gracefully
             error_msg = str(e)
@@ -319,34 +331,40 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
         {
             "outtmpl": video_template,
             "merge_output_format": "mp4",
-            "http_headers": {"User-Agent": "yt-dlp/2024.12.13"}
+            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+            "extractor_args": {"tiktok": {"webpage_download": True}},
+            "cookiesfrombrowser": None,
         },
-        # Strategy 2: Try specific video+audio combination
+        # Strategy 2: TikTok-specific configuration with cookies
         {
             "outtmpl": video_template,
-            "format": "bestvideo+bestaudio/best",
-            "merge_output_format": "mp4",
-            "http_headers": {"User-Agent": "yt-dlp/2024.12.13"}
-        },
-        # Strategy 3: Use Chrome cookies with automatic format selection
-        {
-            "outtmpl": video_template,
+            "format": "best[ext=mp4]/best",
             "merge_output_format": "mp4",
             "cookiesfrombrowser": ("chrome",),
-            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+            "extractor_args": {"tiktok": {"webpage_download": True, "api_hostname": "api.tiktokv.com"}},
+        },
+        # Strategy 3: YouTube-optimized with multiple format fallbacks
+        {
+            "outtmpl": video_template,
+            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "merge_output_format": "mp4",
+            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            "extractor_retries": 3,
         },
         # Strategy 4: Use Firefox cookies as fallback
         {
             "outtmpl": video_template,
             "merge_output_format": "mp4",
             "cookiesfrombrowser": ("firefox",),
-            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0"}
         },
-        # Strategy 5: Alternative user agent without cookies
+        # Strategy 5: Last resort with generic extractor
         {
             "outtmpl": video_template,
             "merge_output_format": "mp4",
-            "http_headers": {"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"}
+            "http_headers": {"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"},
+            "force_generic_extractor": True,
         }
     ]
     
