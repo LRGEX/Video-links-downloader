@@ -23,6 +23,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+/LRGEX Global Guidelines
+
 # PyInstaller specific
 *.manifest
 *.spec
