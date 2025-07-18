@@ -109,3 +109,4 @@ config.ini
 secrets.json
 .env.local
 .env.production
+/megatools

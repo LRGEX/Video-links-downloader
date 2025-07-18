@@ -1,14 +1,13 @@
 [project]
-name = "video-links-downloader"
-version = "0.1.0"
-description = "Add your description here"
+name = "lrgex-video-downloader"
+version = "4.0.0"
+description = "Revolutionary zero-setup video downloader with complete automation for YouTube, TikTok, and MEGA.nz"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "beautifulsoup4>=4.13.4",
     "gallery-dl>=1.29.7",
     "lxml>=5.4.0",
-    "mega-py>=1.0.8",
     "pycryptodome>=3.23.0",
     "pyinstaller>=6.13.0",
     "pywin32>=310",
