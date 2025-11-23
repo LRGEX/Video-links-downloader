@@ -21,6 +21,8 @@ import subprocess
 import yt_dlp
 import sys
 import re
+import io
+import contextlib
 import shutil
 import time
 import requests
@@ -65,6 +67,34 @@ try:
 except ImportError:
     GALLERY_DL_AVAILABLE = False
     print("⚠️ Gallery-dl not found. Photo post audio extraction will be skipped.")
+
+
+
+def get_available_browser():
+    """Auto-detect which browser is available for cookie extraction."""
+    browsers_to_try = ["edge", "chrome", "firefox", "safari", "opera", "brave"]
+
+    for browser in browsers_to_try:
+        try:
+            # Quick test to see if browser cookies are accessible
+            test_opts = {
+                "cookiesfrombrowser": (browser,),
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": True,
+            }
+            with yt_dlp.YoutubeDL(test_opts) as ydl:
+                # Browser detected - suppress verbose output
+                return browser
+        except Exception:
+            continue
+
+    # No browser cookies - will proceed without them
+    return None
+
+
+available_browser = get_available_browser()
+TECHNICAL_LOGS = []
 
 
 def sanitize_filename(filename):
@@ -169,38 +199,60 @@ def download_ffmpeg():
     """Download FFmpeg if it's not available locally or globally."""
     base_dir = get_base_dir()
     ffmpeg_path = os.path.join(base_dir, "ffmpeg.exe")
-    download_url = "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"
+    
+    # NEW WORKING URL - Uses a specific release instead of "latest"
+    download_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
     zip_path = os.path.join(base_dir, "ffmpeg.zip")
+    
     try:
+        print("⬬ Downloading FFmpeg from GitHub...")
         urllib.request.urlretrieve(download_url, zip_path)
-        print("FFmpeg downloaded successfully.")
+        print("✅ FFmpeg downloaded successfully.")
+        
         # Extract the FFmpeg binary
         extract_dir = os.path.join(base_dir, "ffmpeg_temp")
         os.makedirs(extract_dir, exist_ok=True)
+        
+        print("📦 Extracting FFmpeg...")
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_dir)
+        
         # Locate the ffmpeg.exe file
+        ffmpeg_found = False
         for root, dirs, files in os.walk(extract_dir):
             if "ffmpeg.exe" in files:
                 extracted_ffmpeg_path = os.path.join(root, "ffmpeg.exe")
-                os.rename(extracted_ffmpeg_path, ffmpeg_path)
-                print("FFmpeg installed successfully.")
+                shutil.move(extracted_ffmpeg_path, ffmpeg_path)
+                print("✅ FFmpeg installed successfully.")
+                ffmpeg_found = True
                 break
-        else:
-            raise FileNotFoundError(
-                "Failed to locate ffmpeg.exe in the extracted files."
-            )
+        
+        if not ffmpeg_found:
+            raise FileNotFoundError("Failed to locate ffmpeg.exe in the extracted files.")
+        
         # Cleanup
+        print("🧹 Cleaning up temporary files...")
         os.remove(zip_path)
         shutil.rmtree(extract_dir)
+        
         return ffmpeg_path
+        
+    except urllib.error.HTTPError as e:
+        print(f"❌ HTTP Error {e.code}: {e.reason}")
+        print(f"📍 Failed URL: {download_url}")
+        print("\n💡 Alternative solutions:")
+        print("   1. Download manually from: https://www.gyan.dev/ffmpeg/builds/")
+        print("   2. Or from: https://github.com/BtbN/FFmpeg-Builds/releases")
+        print(f"   3. Place 'ffmpeg.exe' in: {base_dir}")
+        raise RuntimeError("Unable to download FFmpeg automatically.")
+        
     except Exception as e:
-        print(f"An error occurred while downloading or extracting FFmpeg: {e}")
-        print("Please download FFmpeg manually from:")
-        print("https://github.com/BtbN/FFmpeg-Builds/releases/latest/")
-        print(
-            "After downloading, place 'ffmpeg.exe' in the same folder as this script."
-        )
+        print(f"❌ An error occurred while downloading or extracting FFmpeg: {e}")
+        print("\n💡 Manual download instructions:")
+        print("   1. Visit: https://www.gyan.dev/ffmpeg/builds/")
+        print("   2. Download: ffmpeg-release-essentials.zip")
+        print("   3. Extract ffmpeg.exe from the 'bin' folder")
+        print(f"   4. Place it in: {base_dir}")
         raise RuntimeError("Unable to download or extract FFmpeg.")
 
 
@@ -265,7 +317,7 @@ def reencode_to_mp4(input_file, output_file, ffmpeg_path):
             command.insert(2, "qsv")
         elif encoder == "h264_amf":
             command.insert(2, "dxva2")  # AMD typically uses DirectX Video Acceleration
-    subprocess.run(command)
+    subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     if os.path.exists(output_file):
         os.remove(input_file)  # Remove the original file
@@ -279,13 +331,15 @@ def extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path):
         sanitize_filename(os.path.splitext(os.path.basename(file_path))[0]) + ".mp3",
     )
     if os.path.exists(mp3_file_path):
-        print(f"MP3 file already exists, skipping extraction: {mp3_file_path}")
+        print(f"⏭️ MP3 file already exists, skipping extraction: {mp3_file_path}")
         return mp3_file_path
-    print(f"Extracting audio from {file_path} to {mp3_file_path}...")
+    print(f"🎵 Extracting audio from {file_path} to {mp3_file_path}...")
     subprocess.run(
-        [ffmpeg_path, "-y", "-i", file_path, "-q:a", "0", "-map", "a", mp3_file_path]
+        [ffmpeg_path, "-y", "-i", file_path, "-q:a", "0", "-map", "a", mp3_file_path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
-    print(f"Audio extraction completed: {mp3_file_path}")
+    print(f"✅ Audio extraction completed: {mp3_file_path}")
     return mp3_file_path
 
 
@@ -296,6 +350,7 @@ def download_videos_and_audio(
     os.makedirs(video_folder, exist_ok=True)
     os.makedirs(audio_folder, exist_ok=True)
     failed_links = []
+    TECHNICAL_LOGS.clear()
 
     # Ensure FFmpeg is available
     ffmpeg_path = get_ffmpeg_path()
@@ -307,7 +362,28 @@ def download_videos_and_audio(
         links = file.readlines()
 
     # Remove duplicates and track processed links
-    raw_links = [link.strip() for link in links if link.strip()]
+    # Filter out comment lines (starting with #) and empty lines
+    raw_links = [
+        link.strip()
+        for link in links
+        if link.strip() and not link.strip().startswith("#")
+    ]
+
+    # Check if there are any valid links
+    if not raw_links:
+        print("\n" + "=" * 60)
+        print("📝 No links found in links.txt")
+        print("=" * 60)
+        print("\nPlease add video links to links.txt and run the program again.")
+        print("\nSupported platforms:")
+        print("  • YouTube (youtube.com, youtu.be)")
+        print("  • TikTok (tiktok.com)")
+        print("  • MEGA.nz (mega.nz)")
+        print("\nExample links.txt content:")
+        print("  https://www.youtube.com/watch?v=example123")
+        print("  https://www.tiktok.com/@user/video/1234567890")
+        print("  https://mega.nz/file/example#key")
+        return
     unique_links, duplicates = detect_duplicates_simple(raw_links)
 
     if duplicates:
@@ -323,7 +399,6 @@ def download_videos_and_audio(
         try:
             # Clean YouTube link by removing extra parameters
             sanitized_link = sanitize_youtube_link(link)
-            print(f"  → Sanitized: {sanitized_link}")
 
             # Check if it's a MEGA link
             if "mega.nz" in sanitized_link.lower():
@@ -383,10 +458,15 @@ def download_videos_and_audio(
     print("\n🎵 Final check: Extracting MP3 from any videos missing audio files...")
     extract_missing_audio_files(video_folder, audio_folder, ffmpeg_path)
 
-    if failed_links:
+    if TECHNICAL_LOGS or failed_links:
         with open(log_file, "w", encoding="utf-8") as log:
-            log.write("Links that could not be processed:\n\n")
-            log.write("\n".join(failed_links))
+            if TECHNICAL_LOGS:
+                log.write("Technical details:\n")
+                log.write("\n".join(TECHNICAL_LOGS))
+                log.write("\n\n")
+            if failed_links:
+                log.write("Links that could not be processed:\n\n")
+                log.write("\n".join(failed_links))
         print(f"Log file created: {log_file}")
 
     print("All downloads are complete!")
@@ -401,7 +481,7 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
         "outtmpl": video_template,
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "merge_output_format": "mp4",  # Ensure merged output is MP4
-        "cookiesfrombrowser": ("chrome",),  # Try to use Chrome cookies automatically
+        "cookiesfrombrowser": (available_browser,) if available_browser else None,
         "extractor_retries": 3,  # Retry failed extractions
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -421,19 +501,27 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
             },
             "extractor_args": {"tiktok": {"webpage_download": True}},
             "cookiesfrombrowser": None,
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [lambda d: None],
         },
-        # Strategy 2: TikTok-specific configuration with cookies
+        # Strategy 2: TikTok-specific configuration without cookies
         {
             "outtmpl": video_template,
             "format": "best[ext=mp4]/best",
             "merge_output_format": "mp4",
-            "cookiesfrombrowser": ("chrome",),
+            "cookiesfrombrowser": None,
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             },
             "extractor_args": {
                 "tiktok": {"webpage_download": True, "api_hostname": "api.tiktokv.com"}
             },
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [lambda d: None],
         },
         # Strategy 3: YouTube-optimized with multiple format fallbacks
         {
@@ -444,70 +532,93 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             },
             "extractor_retries": 3,
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [lambda d: None],
         },
         # Strategy 4: Use Firefox cookies as fallback
         {
             "outtmpl": video_template,
             "merge_output_format": "mp4",
-            "cookiesfrombrowser": ("firefox",),
+            "cookiesfrombrowser": (available_browser,) if available_browser else None,
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0"
             },
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [lambda d: None],
         },
         # Strategy 5: Last resort with generic extractor
         {
             "outtmpl": video_template,
             "merge_output_format": "mp4",
+            "cookiesfrombrowser": (available_browser,) if available_browser else None,
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
             },
             "force_generic_extractor": True,
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [lambda d: None],
         },
     ]
 
     for i, strategy in enumerate(strategies, 1):
         try:
-            print(f"Attempting download strategy {i}/5...")
-            with yt_dlp.YoutubeDL(strategy) as ydl:
-                result = ydl.extract_info(link, download=False)
-                video_title = sanitize_filename(result.get("title", "unknown"))
-                mp4_file_path = os.path.join(video_folder, f"{video_title}.mp4")
+            # Try strategy silently - errors logged to error_log.txt only
+            # Suppress stderr to hide cookie database errors
+            stderr_suppressor = io.StringIO()
+            with contextlib.redirect_stderr(stderr_suppressor):
+                with yt_dlp.YoutubeDL(strategy) as ydl:
+                    result = ydl.extract_info(link, download=False)
+                    video_title = sanitize_filename(result.get("title", "unknown"))
+                    mp4_file_path = os.path.join(video_folder, f"{video_title}.mp4")
 
-                # Skip if video already exists
-                if os.path.exists(mp4_file_path):
-                    print(
-                        f"MP4 file already exists, skipping download: {mp4_file_path}"
-                    )
-                    return
+                    # Skip if video already exists
+                    if os.path.exists(mp4_file_path):
+                        print(
+                            f"⏭️ MP4 file already exists, skipping download: {mp4_file_path}"
+                        )
+                        return
 
-                # Download the video
-                print(f"Downloading video: {link}")
-                result = ydl.extract_info(link, download=True)
-                downloaded_file = ydl.prepare_filename(result)
+                    # Download the video
+                    result = ydl.extract_info(link, download=True)
+                    downloaded_file = ydl.prepare_filename(result)
 
-                # Check if re-encoding is needed
-                if not downloaded_file.endswith(".mp4"):
-                    reencode_to_mp4(downloaded_file, mp4_file_path, ffmpeg_path)
-                else:
-                    os.rename(downloaded_file, mp4_file_path)
+                    # Check if re-encoding is needed
+                    if not downloaded_file.endswith(".mp4"):
+                        reencode_to_mp4(downloaded_file, mp4_file_path, ffmpeg_path)
+                    else:
+                        os.rename(downloaded_file, mp4_file_path)
 
-                # Extract audio to MP3
-                extract_audio_to_mp3(mp4_file_path, audio_folder, ffmpeg_path)
-                download_success = True
-                print(f"Successfully downloaded using strategy {i}")
-                break
+                    # Extract audio to MP3
+                    extract_audio_to_mp3(mp4_file_path, audio_folder, ffmpeg_path)
+                    download_success = True
+                    print(f"✅ Successfully downloaded using strategy {i}")
+                    break
+
+            # Capture any stderr output for logging only
+            stderr_output = stderr_suppressor.getvalue()
+            if stderr_output:
+                TECHNICAL_LOGS.append(
+                    f"Strategy {i} stderr for {link}: {stderr_output}"
+                )
 
         except Exception as e:
             error_msg = str(e).lower()
-            print(
-                f"Strategy {i} failed: {str(e).split('[0;31m')[0] if '[0;31m' in str(e) else str(e)}"
+            TECHNICAL_LOGS.append(
+                f"Strategy {i} error for {link}: {str(e).split('[0;31m')[0] if '[0;31m' in str(e) else str(e)}"
             )
+            # Only log to error_log.txt, don't print to console
+            # Silent failure - will try next strategy
 
             # Check if it's a photo post (unsupported URL with /photo/ in the resolved URL)
             if "unsupported url" in error_msg and (
                 "/photo/" in str(e) or "photo" in str(e)
             ):
-                print("📷 Detected photo post - attempting audio extraction...")
                 try:
                     download_photo_post_with_audio(
                         link, video_folder, audio_folder, ffmpeg_path
@@ -516,7 +627,9 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
                     print("✅ Photo post audio extracted successfully!")
                     break
                 except Exception as photo_error:
-                    print(f"❌ Photo post extraction failed: {photo_error}")
+                    TECHNICAL_LOGS.append(
+                        f"❌ Photo post extraction failed for {link}: {photo_error}"
+                    )
                     # Continue to next strategy or fail
                     pass
 
@@ -857,7 +970,7 @@ def extract_missing_audio_files(video_folder, audio_folder, ffmpeg_path):
             missing_audio.append((file_path, filename, mp3_filename))
 
     if not missing_audio:
-        print(" All video files already have corresponding MP3 files!")
+        print("✅ All video files already have corresponding MP3 files!")
         return
 
     print(
@@ -870,7 +983,9 @@ def extract_missing_audio_files(video_folder, audio_folder, ffmpeg_path):
             extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path)
             print(f"✅ Created: {mp3_filename}")
         except Exception as e:
-            print(f"❌ Failed to extract audio from {filename}: {e}")
+            TECHNICAL_LOGS.append(
+                f"❌ Failed to extract audio from {filename}: {e}"
+            )
 
 
 def cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path):
@@ -902,19 +1017,16 @@ def cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path):
             print(f"🎵 Processing misplaced audio file: {filename}")
 
             if os.path.exists(mp3_path):
-                print(f"✓ MP3 already exists in Audio folder: {mp3_filename}")
-                print(f"🗑 Removing duplicate from Videos folder...")
+                print(f"⏭️ MP3 already exists in Audio folder: {mp3_filename}")
                 os.remove(file_path)
-                print(f" Removed: {filename}")
             else:
                 print(f"🎵 Converting to MP3 and moving to Audio folder...")
                 extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path)
-                print(f"🗑️ Removing original from Videos folder...")
                 os.remove(file_path)
-                print(f" Converted and moved: {filename} → {mp3_filename}")
+                print(f"✅ Converted and moved: {filename} → {mp3_filename}")
 
         except Exception as e:
-            print(f"❌ Error processing {filename}: {e}")
+            TECHNICAL_LOGS.append(f"❌ Error processing {filename}: {e}")
 
 
 def detect_and_rename_mega_file(temp_filepath, file_id, output_folder):
@@ -1068,7 +1180,7 @@ if __name__ == "__main__":
     print("  / /   / /_/ / / __/ __/  |   /")
     print(" / /___/ _, _/ /_/ / /___ /   |")
     print("/_____/_/ |_|\\____/_____//_/|_|")
-    print("YouTube Downloader - v3.9 (MEGA FORCE DOWNLOAD)")
+    print("Video links downloader - v4.0")
     print("============================================================")
     
     links_file = "links.txt"
@@ -1079,8 +1191,26 @@ if __name__ == "__main__":
             print(f"📋 Copied '{example_file}' to '{links_file}'")
         else:
             with open(links_file, "w", encoding="utf-8") as f:
-                f.write("# Add your YouTube/TikTok/MEGA.nz links here, one per line\n")
-            print(f"📝 Created '{links_file}' with instructions.")
+                f.write("# Add your video links below (one per line)\n")
+                f.write("# Supported: YouTube, TikTok, MEGA.nz\n")
+                f.write("# Lines starting with # are comments and will be ignored\n")
+                f.write("#\n")
+                f.write("# Example:\n")
+                f.write("# https://www.youtube.com/watch?v=example123\n")
+                f.write("# https://www.tiktok.com/@user/video/1234567890\n")
+                f.write("# https://mega.nz/file/example#key\n")
+            print(f"📝 Created '{links_file}' - Please add your video links and run again.")
+            print("\n" + "=" * 60)
+            print("⚠️  FIRST RUN SETUP COMPLETE")
+            print("=" * 60)
+            print("\nNext steps:")
+            print("1. Open 'links.txt' in a text editor")
+            print("2. Add your video links (one per line)")
+            print("3. Run this program again")
+            print("\nThe program will now exit...")
+            print("=" * 60)
+            input("\nPress ENTER to close...")
+            sys.exit(0)
     try:
         download_videos_and_audio(links_file)
     except KeyboardInterrupt:
@@ -1088,3 +1218,9 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\n❌ An error occurred: {e}")
         print("Check error_log.txt for details.")
+    finally:
+        # Prevent window from closing immediately when run as EXE
+        print("\n" + "="*60)
+        print("✅ Program finished!")
+        print("="*60)
+        input("\nPress ENTER to close this window...")
