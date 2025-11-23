@@ -199,38 +199,60 @@ def download_ffmpeg():
     """Download FFmpeg if it's not available locally or globally."""
     base_dir = get_base_dir()
     ffmpeg_path = os.path.join(base_dir, "ffmpeg.exe")
-    download_url = "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"
+    
+    # NEW WORKING URL - Uses a specific release instead of "latest"
+    download_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
     zip_path = os.path.join(base_dir, "ffmpeg.zip")
+    
     try:
+        print("⬬ Downloading FFmpeg from GitHub...")
         urllib.request.urlretrieve(download_url, zip_path)
-        print("FFmpeg downloaded successfully.")
+        print("✅ FFmpeg downloaded successfully.")
+        
         # Extract the FFmpeg binary
         extract_dir = os.path.join(base_dir, "ffmpeg_temp")
         os.makedirs(extract_dir, exist_ok=True)
+        
+        print("📦 Extracting FFmpeg...")
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_dir)
+        
         # Locate the ffmpeg.exe file
+        ffmpeg_found = False
         for root, dirs, files in os.walk(extract_dir):
             if "ffmpeg.exe" in files:
                 extracted_ffmpeg_path = os.path.join(root, "ffmpeg.exe")
-                os.rename(extracted_ffmpeg_path, ffmpeg_path)
-                print("FFmpeg installed successfully.")
+                shutil.move(extracted_ffmpeg_path, ffmpeg_path)
+                print("✅ FFmpeg installed successfully.")
+                ffmpeg_found = True
                 break
-        else:
-            raise FileNotFoundError(
-                "Failed to locate ffmpeg.exe in the extracted files."
-            )
+        
+        if not ffmpeg_found:
+            raise FileNotFoundError("Failed to locate ffmpeg.exe in the extracted files.")
+        
         # Cleanup
+        print("🧹 Cleaning up temporary files...")
         os.remove(zip_path)
         shutil.rmtree(extract_dir)
+        
         return ffmpeg_path
+        
+    except urllib.error.HTTPError as e:
+        print(f"❌ HTTP Error {e.code}: {e.reason}")
+        print(f"📍 Failed URL: {download_url}")
+        print("\n💡 Alternative solutions:")
+        print("   1. Download manually from: https://www.gyan.dev/ffmpeg/builds/")
+        print("   2. Or from: https://github.com/BtbN/FFmpeg-Builds/releases")
+        print(f"   3. Place 'ffmpeg.exe' in: {base_dir}")
+        raise RuntimeError("Unable to download FFmpeg automatically.")
+        
     except Exception as e:
-        print(f"An error occurred while downloading or extracting FFmpeg: {e}")
-        print("Please download FFmpeg manually from:")
-        print("https://github.com/BtbN/FFmpeg-Builds/releases/latest/")
-        print(
-            "After downloading, place 'ffmpeg.exe' in the same folder as this script."
-        )
+        print(f"❌ An error occurred while downloading or extracting FFmpeg: {e}")
+        print("\n💡 Manual download instructions:")
+        print("   1. Visit: https://www.gyan.dev/ffmpeg/builds/")
+        print("   2. Download: ffmpeg-release-essentials.zip")
+        print("   3. Extract ffmpeg.exe from the 'bin' folder")
+        print(f"   4. Place it in: {base_dir}")
         raise RuntimeError("Unable to download or extract FFmpeg.")
 
 
@@ -340,7 +362,28 @@ def download_videos_and_audio(
         links = file.readlines()
 
     # Remove duplicates and track processed links
-    raw_links = [link.strip() for link in links if link.strip()]
+    # Filter out comment lines (starting with #) and empty lines
+    raw_links = [
+        link.strip()
+        for link in links
+        if link.strip() and not link.strip().startswith("#")
+    ]
+
+    # Check if there are any valid links
+    if not raw_links:
+        print("\n" + "=" * 60)
+        print("📝 No links found in links.txt")
+        print("=" * 60)
+        print("\nPlease add video links to links.txt and run the program again.")
+        print("\nSupported platforms:")
+        print("  • YouTube (youtube.com, youtu.be)")
+        print("  • TikTok (tiktok.com)")
+        print("  • MEGA.nz (mega.nz)")
+        print("\nExample links.txt content:")
+        print("  https://www.youtube.com/watch?v=example123")
+        print("  https://www.tiktok.com/@user/video/1234567890")
+        print("  https://mega.nz/file/example#key")
+        return
     unique_links, duplicates = detect_duplicates_simple(raw_links)
 
     if duplicates:
@@ -1148,8 +1191,26 @@ if __name__ == "__main__":
             print(f"📋 Copied '{example_file}' to '{links_file}'")
         else:
             with open(links_file, "w", encoding="utf-8") as f:
-                f.write("# Add your YouTube/TikTok/MEGA.nz links here, one per line\n")
-            print(f"📝 Created '{links_file}' with instructions.")
+                f.write("# Add your video links below (one per line)\n")
+                f.write("# Supported: YouTube, TikTok, MEGA.nz\n")
+                f.write("# Lines starting with # are comments and will be ignored\n")
+                f.write("#\n")
+                f.write("# Example:\n")
+                f.write("# https://www.youtube.com/watch?v=example123\n")
+                f.write("# https://www.tiktok.com/@user/video/1234567890\n")
+                f.write("# https://mega.nz/file/example#key\n")
+            print(f"📝 Created '{links_file}' - Please add your video links and run again.")
+            print("\n" + "=" * 60)
+            print("⚠️  FIRST RUN SETUP COMPLETE")
+            print("=" * 60)
+            print("\nNext steps:")
+            print("1. Open 'links.txt' in a text editor")
+            print("2. Add your video links (one per line)")
+            print("3. Run this program again")
+            print("\nThe program will now exit...")
+            print("=" * 60)
+            input("\nPress ENTER to close...")
+            sys.exit(0)
     try:
         download_videos_and_audio(links_file)
     except KeyboardInterrupt:
