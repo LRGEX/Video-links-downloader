@@ -67,6 +67,33 @@ except ImportError:
     print("⚠️ Gallery-dl not found. Photo post audio extraction will be skipped.")
 
 
+
+def get_available_browser():
+    """Auto-detect which browser is available for cookie extraction."""
+    browsers_to_try = ["edge", "chrome", "firefox", "safari", "opera", "brave"]
+
+    for browser in browsers_to_try:
+        try:
+            # Quick test to see if browser cookies are accessible
+            test_opts = {
+                "cookiesfrombrowser": (browser,),
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": True,
+            }
+            with yt_dlp.YoutubeDL(test_opts) as ydl:
+                print(f"✓ Detected browser: {browser}")
+                return browser
+        except Exception:
+            continue
+
+    print("⚠️ No browser cookies available, using cookie-less mode")
+    return None
+
+
+available_browser = get_available_browser()
+
+
 def sanitize_filename(filename):
     """Sanitize filenames by removing or replacing invalid characters."""
     return re.sub(r'[<>:"/\\|?*]', "_", filename)
@@ -401,7 +428,7 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
         "outtmpl": video_template,
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "merge_output_format": "mp4",  # Ensure merged output is MP4
-        "cookiesfrombrowser": ("chrome",),  # Try to use Chrome cookies automatically
+        "cookiesfrombrowser": (available_browser,) if available_browser else None,
         "extractor_retries": 3,  # Retry failed extractions
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -420,14 +447,14 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             },
             "extractor_args": {"tiktok": {"webpage_download": True}},
-            "cookiesfrombrowser": None,
+            "cookiesfrombrowser": (available_browser,) if available_browser else None,
         },
         # Strategy 2: TikTok-specific configuration with cookies
         {
             "outtmpl": video_template,
             "format": "best[ext=mp4]/best",
             "merge_output_format": "mp4",
-            "cookiesfrombrowser": ("chrome",),
+            "cookiesfrombrowser": (available_browser,) if available_browser else None,
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             },
@@ -449,7 +476,7 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
         {
             "outtmpl": video_template,
             "merge_output_format": "mp4",
-            "cookiesfrombrowser": ("firefox",),
+            "cookiesfrombrowser": (available_browser,) if available_browser else None,
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0"
             },
@@ -458,6 +485,7 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
         {
             "outtmpl": video_template,
             "merge_output_format": "mp4",
+            "cookiesfrombrowser": (available_browser,) if available_browser else None,
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
             },
@@ -1068,7 +1096,7 @@ if __name__ == "__main__":
     print("  / /   / /_/ / / __/ __/  |   /")
     print(" / /___/ _, _/ /_/ / /___ /   |")
     print("/_____/_/ |_|\\____/_____//_/|_|")
-    print("YouTube Downloader - v3.9 (MEGA FORCE DOWNLOAD)")
+    print("Video links downloader - v4.0")
     print("============================================================")
     
     links_file = "links.txt"
