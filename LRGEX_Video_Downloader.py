@@ -1071,8 +1071,18 @@ if __name__ == "__main__":
     print("YouTube Downloader - v3.9 (MEGA FORCE DOWNLOAD)")
     print("============================================================")
     
+    links_file = "links.txt"
+    if not os.path.exists(links_file):
+        example_file = "links.txt.example"
+        if os.path.exists(example_file):
+            shutil.copy2(example_file, links_file)
+            print(f"📋 Copied '{example_file}' to '{links_file}'")
+        else:
+            with open(links_file, "w", encoding="utf-8") as f:
+                f.write("# Add your YouTube/TikTok/MEGA.nz links here, one per line\n")
+            print(f"📝 Created '{links_file}' with instructions.")
     try:
-        download_videos_and_audio("links.txt")
+        download_videos_and_audio(links_file)
     except KeyboardInterrupt:
         print("\n\n⚠️ Download interrupted by user.")
     except Exception as e:
