@@ -21,6 +21,8 @@ import subprocess
 import yt_dlp
 import sys
 import re
+import io
+import contextlib
 import shutil
 import time
 import requests
@@ -82,16 +84,17 @@ def get_available_browser():
                 "extract_flat": True,
             }
             with yt_dlp.YoutubeDL(test_opts) as ydl:
-                print(f"✓ Detected browser: {browser}")
+                # Browser detected - suppress verbose output
                 return browser
         except Exception:
             continue
 
-    print("⚠️ No browser cookies available, using cookie-less mode")
+    # No browser cookies - will proceed without them
     return None
 
 
 available_browser = get_available_browser()
+TECHNICAL_LOGS = []
 
 
 def sanitize_filename(filename):
@@ -292,7 +295,7 @@ def reencode_to_mp4(input_file, output_file, ffmpeg_path):
             command.insert(2, "qsv")
         elif encoder == "h264_amf":
             command.insert(2, "dxva2")  # AMD typically uses DirectX Video Acceleration
-    subprocess.run(command)
+    subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     if os.path.exists(output_file):
         os.remove(input_file)  # Remove the original file
@@ -306,13 +309,15 @@ def extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path):
         sanitize_filename(os.path.splitext(os.path.basename(file_path))[0]) + ".mp3",
     )
     if os.path.exists(mp3_file_path):
-        print(f"MP3 file already exists, skipping extraction: {mp3_file_path}")
+        print(f"⏭️ MP3 file already exists, skipping extraction: {mp3_file_path}")
         return mp3_file_path
-    print(f"Extracting audio from {file_path} to {mp3_file_path}...")
+    print(f"🎵 Extracting audio from {file_path} to {mp3_file_path}...")
     subprocess.run(
-        [ffmpeg_path, "-y", "-i", file_path, "-q:a", "0", "-map", "a", mp3_file_path]
+        [ffmpeg_path, "-y", "-i", file_path, "-q:a", "0", "-map", "a", mp3_file_path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
-    print(f"Audio extraction completed: {mp3_file_path}")
+    print(f"✅ Audio extraction completed: {mp3_file_path}")
     return mp3_file_path
 
 
@@ -323,6 +328,7 @@ def download_videos_and_audio(
     os.makedirs(video_folder, exist_ok=True)
     os.makedirs(audio_folder, exist_ok=True)
     failed_links = []
+    TECHNICAL_LOGS.clear()
 
     # Ensure FFmpeg is available
     ffmpeg_path = get_ffmpeg_path()
@@ -350,7 +356,6 @@ def download_videos_and_audio(
         try:
             # Clean YouTube link by removing extra parameters
             sanitized_link = sanitize_youtube_link(link)
-            print(f"  → Sanitized: {sanitized_link}")
 
             # Check if it's a MEGA link
             if "mega.nz" in sanitized_link.lower():
@@ -410,10 +415,15 @@ def download_videos_and_audio(
     print("\n🎵 Final check: Extracting MP3 from any videos missing audio files...")
     extract_missing_audio_files(video_folder, audio_folder, ffmpeg_path)
 
-    if failed_links:
+    if TECHNICAL_LOGS or failed_links:
         with open(log_file, "w", encoding="utf-8") as log:
-            log.write("Links that could not be processed:\n\n")
-            log.write("\n".join(failed_links))
+            if TECHNICAL_LOGS:
+                log.write("Technical details:\n")
+                log.write("\n".join(TECHNICAL_LOGS))
+                log.write("\n\n")
+            if failed_links:
+                log.write("Links that could not be processed:\n\n")
+                log.write("\n".join(failed_links))
         print(f"Log file created: {log_file}")
 
     print("All downloads are complete!")
@@ -447,20 +457,28 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             },
             "extractor_args": {"tiktok": {"webpage_download": True}},
-            "cookiesfrombrowser": (available_browser,) if available_browser else None,
+            "cookiesfrombrowser": None,
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [lambda d: None],
         },
-        # Strategy 2: TikTok-specific configuration with cookies
+        # Strategy 2: TikTok-specific configuration without cookies
         {
             "outtmpl": video_template,
             "format": "best[ext=mp4]/best",
             "merge_output_format": "mp4",
-            "cookiesfrombrowser": (available_browser,) if available_browser else None,
+            "cookiesfrombrowser": None,
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             },
             "extractor_args": {
                 "tiktok": {"webpage_download": True, "api_hostname": "api.tiktokv.com"}
             },
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [lambda d: None],
         },
         # Strategy 3: YouTube-optimized with multiple format fallbacks
         {
@@ -471,6 +489,10 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             },
             "extractor_retries": 3,
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [lambda d: None],
         },
         # Strategy 4: Use Firefox cookies as fallback
         {
@@ -480,6 +502,10 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0"
             },
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [lambda d: None],
         },
         # Strategy 5: Last resort with generic extractor
         {
@@ -490,52 +516,66 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
                 "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
             },
             "force_generic_extractor": True,
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [lambda d: None],
         },
     ]
 
     for i, strategy in enumerate(strategies, 1):
         try:
-            print(f"Attempting download strategy {i}/5...")
-            with yt_dlp.YoutubeDL(strategy) as ydl:
-                result = ydl.extract_info(link, download=False)
-                video_title = sanitize_filename(result.get("title", "unknown"))
-                mp4_file_path = os.path.join(video_folder, f"{video_title}.mp4")
+            # Try strategy silently - errors logged to error_log.txt only
+            # Suppress stderr to hide cookie database errors
+            stderr_suppressor = io.StringIO()
+            with contextlib.redirect_stderr(stderr_suppressor):
+                with yt_dlp.YoutubeDL(strategy) as ydl:
+                    result = ydl.extract_info(link, download=False)
+                    video_title = sanitize_filename(result.get("title", "unknown"))
+                    mp4_file_path = os.path.join(video_folder, f"{video_title}.mp4")
 
-                # Skip if video already exists
-                if os.path.exists(mp4_file_path):
-                    print(
-                        f"MP4 file already exists, skipping download: {mp4_file_path}"
-                    )
-                    return
+                    # Skip if video already exists
+                    if os.path.exists(mp4_file_path):
+                        print(
+                            f"⏭️ MP4 file already exists, skipping download: {mp4_file_path}"
+                        )
+                        return
 
-                # Download the video
-                print(f"Downloading video: {link}")
-                result = ydl.extract_info(link, download=True)
-                downloaded_file = ydl.prepare_filename(result)
+                    # Download the video
+                    result = ydl.extract_info(link, download=True)
+                    downloaded_file = ydl.prepare_filename(result)
 
-                # Check if re-encoding is needed
-                if not downloaded_file.endswith(".mp4"):
-                    reencode_to_mp4(downloaded_file, mp4_file_path, ffmpeg_path)
-                else:
-                    os.rename(downloaded_file, mp4_file_path)
+                    # Check if re-encoding is needed
+                    if not downloaded_file.endswith(".mp4"):
+                        reencode_to_mp4(downloaded_file, mp4_file_path, ffmpeg_path)
+                    else:
+                        os.rename(downloaded_file, mp4_file_path)
 
-                # Extract audio to MP3
-                extract_audio_to_mp3(mp4_file_path, audio_folder, ffmpeg_path)
-                download_success = True
-                print(f"Successfully downloaded using strategy {i}")
-                break
+                    # Extract audio to MP3
+                    extract_audio_to_mp3(mp4_file_path, audio_folder, ffmpeg_path)
+                    download_success = True
+                    print(f"✅ Successfully downloaded using strategy {i}")
+                    break
+
+            # Capture any stderr output for logging only
+            stderr_output = stderr_suppressor.getvalue()
+            if stderr_output:
+                TECHNICAL_LOGS.append(
+                    f"Strategy {i} stderr for {link}: {stderr_output}"
+                )
 
         except Exception as e:
             error_msg = str(e).lower()
-            print(
-                f"Strategy {i} failed: {str(e).split('[0;31m')[0] if '[0;31m' in str(e) else str(e)}"
+            TECHNICAL_LOGS.append(
+                f"Strategy {i} error for {link}: {str(e).split('[0;31m')[0] if '[0;31m' in str(e) else str(e)}"
             )
+            # Only log to error_log.txt, don't print to console
+            # Silent failure - will try next strategy
 
             # Check if it's a photo post (unsupported URL with /photo/ in the resolved URL)
             if "unsupported url" in error_msg and (
                 "/photo/" in str(e) or "photo" in str(e)
             ):
-                print("📷 Detected photo post - attempting audio extraction...")
                 try:
                     download_photo_post_with_audio(
                         link, video_folder, audio_folder, ffmpeg_path
@@ -544,7 +584,9 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
                     print("✅ Photo post audio extracted successfully!")
                     break
                 except Exception as photo_error:
-                    print(f"❌ Photo post extraction failed: {photo_error}")
+                    TECHNICAL_LOGS.append(
+                        f"❌ Photo post extraction failed for {link}: {photo_error}"
+                    )
                     # Continue to next strategy or fail
                     pass
 
@@ -885,7 +927,7 @@ def extract_missing_audio_files(video_folder, audio_folder, ffmpeg_path):
             missing_audio.append((file_path, filename, mp3_filename))
 
     if not missing_audio:
-        print(" All video files already have corresponding MP3 files!")
+        print("✅ All video files already have corresponding MP3 files!")
         return
 
     print(
@@ -898,7 +940,9 @@ def extract_missing_audio_files(video_folder, audio_folder, ffmpeg_path):
             extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path)
             print(f"✅ Created: {mp3_filename}")
         except Exception as e:
-            print(f"❌ Failed to extract audio from {filename}: {e}")
+            TECHNICAL_LOGS.append(
+                f"❌ Failed to extract audio from {filename}: {e}"
+            )
 
 
 def cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path):
@@ -930,19 +974,16 @@ def cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path):
             print(f"🎵 Processing misplaced audio file: {filename}")
 
             if os.path.exists(mp3_path):
-                print(f"✓ MP3 already exists in Audio folder: {mp3_filename}")
-                print(f"🗑 Removing duplicate from Videos folder...")
+                print(f"⏭️ MP3 already exists in Audio folder: {mp3_filename}")
                 os.remove(file_path)
-                print(f" Removed: {filename}")
             else:
                 print(f"🎵 Converting to MP3 and moving to Audio folder...")
                 extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path)
-                print(f"🗑️ Removing original from Videos folder...")
                 os.remove(file_path)
-                print(f" Converted and moved: {filename} → {mp3_filename}")
+                print(f"✅ Converted and moved: {filename} → {mp3_filename}")
 
         except Exception as e:
-            print(f"❌ Error processing {filename}: {e}")
+            TECHNICAL_LOGS.append(f"❌ Error processing {filename}: {e}")
 
 
 def detect_and_rename_mega_file(temp_filepath, file_id, output_folder):
@@ -1116,3 +1157,9 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\n❌ An error occurred: {e}")
         print("Check error_log.txt for details.")
+    finally:
+        # Prevent window from closing immediately when run as EXE
+        print("\n" + "="*60)
+        print("✅ Program finished!")
+        print("="*60)
+        input("\nPress ENTER to close this window...")
