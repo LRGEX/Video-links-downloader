@@ -5,6 +5,75 @@ All notable changes to LRGEX Video Downloader will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2025-11-30 - CRITICAL BUG FIXES 🔧
+
+### 🔥 **CRITICAL FIXES**
+
+This release fixes critical bugs that made the PyInstaller-built .exe unusable. All users running v4.0 .exe should upgrade immediately.
+
+### Fixed
+
+#### **Critical Bug #1: EXE Spawning 30+ Processes**
+- **Issue**: When running as .exe, the application spawned infinite processes (30+) causing system freeze and crash
+- **Root Cause**: `subprocess.Popen([sys.executable, "-m", "gallery_dl"])` - when running as EXE, `sys.executable` points to the EXE itself, creating infinite recursion
+- **Solution**:
+  - Added `multiprocessing.freeze_support()` at start of main block to prevent PyInstaller process spawning
+  - Replaced subprocess call with direct `gallery_dl.job.DownloadJob()` Python import
+  - Updated PyInstaller spec to properly package all gallery_dl modules
+
+#### **Critical Bug #2: TikTok Photo Posts Failing in EXE**
+- **Issue**: TikTok photo posts worked perfectly in .py script but failed in .exe with `ModuleNotFoundError: No module named 'gallery_dl.extractor.2ch'`
+- **Root Cause**: PyInstaller wasn't including all 100+ gallery_dl extractors (only manually listed ones in hiddenimports)
+- **Solution**: Used `collect_submodules('gallery_dl')` in PyInstaller spec to auto-include all extractors
+
+#### **Critical Bug #3: False Positive Errors in Logs**
+- **Issue**: Error log (`error_log.txt`) showed failures for successfully downloaded TikTok photo posts, making debugging impossible
+- **Root Cause**: Code tried yt-dlp first → failed → logged error → then switched to gallery-dl successfully
+- **Solution**: Added `is_tiktok_photo_post()` function to detect photo posts BEFORE trying yt-dlp strategies, eliminating false errors
+
+#### **Critical Bug #4: Photo Posts Downloaded Multiple Times**
+- **Issue**: Running .exe multiple times re-downloaded the same photo posts (no duplicate detection)
+- **Root Cause**: Filename used timestamp (`photo_post_audio_{time.time()}.mp3`) instead of photo ID, making every filename unique
+- **Solution**: Extract photo ID from URL and use consistent naming (`tiktok_photo_{ID}.mp3`) with duplicate detection
+
+### Added
+
+- `is_tiktok_photo_post()` function for early photo post detection before download attempts
+- Photo ID extraction from TikTok URLs for consistent file naming
+- Duplicate detection for TikTok photo posts (checks if audio already exists before downloading)
+- `multiprocessing.freeze_support()` call to prevent PyInstaller process spawning issues
+- Comprehensive `collect_submodules('gallery_dl')` in PyInstaller spec for complete module inclusion
+
+### Changed
+
+- **Breaking**: TikTok photo post audio files now named `tiktok_photo_{ID}.mp3` instead of `photo_post_audio_{timestamp}.mp3` (consistent naming)
+- Photo post detection moved from exception handler to pre-download validation (cleaner error handling)
+- Gallery-dl now called directly via Python import instead of subprocess (works in both .py and .exe)
+- PyInstaller spec now auto-collects all gallery_dl modules instead of manual listing
+
+### Technical Improvements
+
+- Eliminated subprocess-based gallery-dl execution (prevents EXE recursion)
+- Improved error logging accuracy (only real errors logged, no false positives)
+- Enhanced PyInstaller compatibility with proper module collection
+- Optimized photo post handling with early detection and duplicate prevention
+- Added proper process cleanup with `multiprocessing.freeze_support()`
+
+### Migration Notes
+
+- **V4.0 users**: Upgrade immediately if using .exe (critical bugs fixed)
+- **Existing photo post audio files**: Old timestamp-based files will not be recognized as duplicates. Manually rename them to `tiktok_photo_{ID}.mp3` format or let script re-download with new names
+- **PyInstaller builds**: Use new spec file (`LRGEX Video Downloader v4.1.spec`) for proper module inclusion
+
+### Testing Performed
+
+- ✅ .py script: All downloads working (YouTube, TikTok videos, TikTok photos, MEGA)
+- ✅ .exe: All downloads working correctly
+- ✅ .exe: Only 1-2 processes in Task Manager (not 30+)
+- ✅ .exe: TikTok photo posts download successfully
+- ✅ .exe: Duplicate detection works (skips re-downloads)
+- ✅ Error logs: Only real errors logged (no false positives)
+
 ## [4.0.0] - 2025-01-14 - REVOLUTIONARY RELEASE 🚀
 
 ### 🔥 **BREAKTHROUGH FEATURES**

@@ -1,9 +1,9 @@
 """
-LRGEX Video Downloader v4.0
+LRGEX Video Downloader v4.1
 ===========================
 Revolutionary zero-setup video downloader with complete automation
 
-🚀 V4.0 BREAKTHROUGH FEATURES:
+🚀 V4.1 FEATURES:
 - ZERO SETUP REQUIRED: Auto-downloads all dependencies (FFmpeg, Megatools)
 - MEGA.nz FIXED: 100% working downloads with proper decryption
 - COMPLETE AUTOMATION: One-click operation for non-technical users
@@ -1301,7 +1301,7 @@ if __name__ == "__main__":
     print("  / /   / /_/ / / __/ __/  |   /")
     print(" / /___/ _, _/ /_/ / /___ /   |")
     print("/_____/_/ |_|\\____/_____//_/|_|")
-    print("Video links downloader - v4.0")
+    print("Video links downloader - v4.1")
     print("============================================================")
 
     links_file = "links.txt"

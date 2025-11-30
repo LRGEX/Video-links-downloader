@@ -2,7 +2,7 @@
   <img src="https://download.lrgex.com/Dark%20Full%20Logo.png" alt="Logo" width="400" height="100">
   
 </p>
-<h1 align="center">LRGEX Video Downloader v4.0</h1>
+<h1 align="center">LRGEX Video Downloader v4.1</h1>
 
 A powerful Python application for downloading videos and extracting audio from multiple platforms including YouTube, TikTok, and MEGA.nz. The application automatically organizes downloads into separate folders and provides advanced features like anti-bot detection, hardware acceleration, and **completely automated dependency management**.
 
@@ -16,6 +16,21 @@ A powerful Python application for downloading videos and extracting audio from m
 - ✅ **Fair Use**: Ensure your usage complies with fair use and local copyright laws
 
 **LRGEX is not responsible for misuse of this software. Users are solely responsible for ensuring their usage complies with applicable laws and platform terms of service.**
+
+## 🆕 What's New in v4.1 - **CRITICAL BUG FIXES**
+
+### 🔧 **CRITICAL FIXES FOR PYINSTALLER .EXE**
+
+**v4.1** fixes critical bugs that made the v4.0 .exe unusable:
+
+- **Fixed: EXE spawning 30+ processes** causing system freeze
+- **Fixed: TikTok photo posts failing in .exe** (missing gallery_dl modules)
+- **Fixed: False error logs** for successful downloads
+- **Fixed: Photo posts re-downloading** every time (now has duplicate detection)
+
+**All v4.0 .exe users should upgrade immediately!** The .py script was not affected.
+
+---
 
 ## 🆕 What's New in v4.0 - **REVOLUTIONARY RELEASE**
 
