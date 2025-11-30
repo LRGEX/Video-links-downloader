@@ -32,11 +32,31 @@ import webbrowser
 import sqlite3
 import json
 import platform
+import atexit
+import signal
+import multiprocessing
 from pathlib import Path
 import base64
 from urllib.parse import urlparse
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
+
+# Track child processes to clean up on exit
+_child_processes = []
+
+def cleanup_processes():
+    """Kill all child processes when script exits"""
+    for proc in _child_processes:
+        try:
+            if proc.poll() is None:  # Process still running
+                proc.kill()
+                proc.wait(timeout=5)
+        except:
+            pass
+
+# Register cleanup handler
+atexit.register(cleanup_processes)
+signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
 
 # Platform-specific imports for cookie decryption
 try:
@@ -58,6 +78,17 @@ from pathlib import Path
 import base64
 import win32crypt  # For Windows cookie decryption
 
+# Fix Windows console encoding for Unicode characters
+if sys.platform == "win32":
+    import ctypes
+
+    try:
+        ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except:
+        pass
+
 # Gallery-dl support for photo posts with audio
 try:
     import gallery_dl
@@ -67,7 +98,6 @@ try:
 except ImportError:
     GALLERY_DL_AVAILABLE = False
     print("⚠️ Gallery-dl not found. Photo post audio extraction will be skipped.")
-
 
 
 def get_available_browser():
@@ -199,24 +229,24 @@ def download_ffmpeg():
     """Download FFmpeg if it's not available locally or globally."""
     base_dir = get_base_dir()
     ffmpeg_path = os.path.join(base_dir, "ffmpeg.exe")
-    
+
     # NEW WORKING URL - Uses a specific release instead of "latest"
     download_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
     zip_path = os.path.join(base_dir, "ffmpeg.zip")
-    
+
     try:
         print("⬬ Downloading FFmpeg from GitHub...")
         urllib.request.urlretrieve(download_url, zip_path)
         print("✅ FFmpeg downloaded successfully.")
-        
+
         # Extract the FFmpeg binary
         extract_dir = os.path.join(base_dir, "ffmpeg_temp")
         os.makedirs(extract_dir, exist_ok=True)
-        
+
         print("📦 Extracting FFmpeg...")
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_dir)
-        
+
         # Locate the ffmpeg.exe file
         ffmpeg_found = False
         for root, dirs, files in os.walk(extract_dir):
@@ -226,17 +256,19 @@ def download_ffmpeg():
                 print("✅ FFmpeg installed successfully.")
                 ffmpeg_found = True
                 break
-        
+
         if not ffmpeg_found:
-            raise FileNotFoundError("Failed to locate ffmpeg.exe in the extracted files.")
-        
+            raise FileNotFoundError(
+                "Failed to locate ffmpeg.exe in the extracted files."
+            )
+
         # Cleanup
         print("🧹 Cleaning up temporary files...")
         os.remove(zip_path)
         shutil.rmtree(extract_dir)
-        
+
         return ffmpeg_path
-        
+
     except urllib.error.HTTPError as e:
         print(f"❌ HTTP Error {e.code}: {e.reason}")
         print(f"📍 Failed URL: {download_url}")
@@ -245,7 +277,7 @@ def download_ffmpeg():
         print("   2. Or from: https://github.com/BtbN/FFmpeg-Builds/releases")
         print(f"   3. Place 'ffmpeg.exe' in: {base_dir}")
         raise RuntimeError("Unable to download FFmpeg automatically.")
-        
+
     except Exception as e:
         print(f"❌ An error occurred while downloading or extracting FFmpeg: {e}")
         print("\n💡 Manual download instructions:")
@@ -405,7 +437,9 @@ def download_videos_and_audio(
                 print("🔗 MEGA link detected - using megatools")
                 try:
                     # Use the simple megatools approach
-                    result = download_mega_file(sanitized_link, video_folder, audio_folder, ffmpeg_path)
+                    result = download_mega_file(
+                        sanitized_link, video_folder, audio_folder, ffmpeg_path
+                    )
                     if result and os.path.exists(result):
                         print("✅ MEGA download completed successfully!")
                     else:
@@ -472,8 +506,36 @@ def download_videos_and_audio(
     print("All downloads are complete!")
 
 
+def is_tiktok_photo_post(link):
+    """Check if a TikTok link is a photo post by resolving the URL."""
+    try:
+        # Resolve shortened URLs
+        if "vt.tiktok.com" in link or "vm.tiktok.com" in link:
+            response = requests.head(link, allow_redirects=True, timeout=10)
+            resolved_url = response.url
+        else:
+            resolved_url = link
+
+        # Check if it's a photo post
+        return "/photo/" in resolved_url
+    except:
+        return False
+
+
 def download_video(link, video_folder, audio_folder, ffmpeg_path):
     """Download video and ensure only MP4 in Videos and MP3 in Audio."""
+
+    # DETECT PHOTO POSTS FIRST - Skip yt-dlp entirely for photo posts
+    if is_tiktok_photo_post(link):
+        print(f"📷 Photo post detected - using gallery-dl for audio extraction")
+        try:
+            download_photo_post_with_audio(link, video_folder, audio_folder, ffmpeg_path)
+            print("✅ Photo post audio extracted successfully!")
+            return  # Success - exit early
+        except Exception as photo_error:
+            TECHNICAL_LOGS.append(f"❌ Photo post extraction failed for {link}: {photo_error}")
+            raise photo_error  # This is a REAL error, not false positive
+
     video_template = os.path.join(video_folder, sanitize_filename("%(title)s.%(ext)s"))
 
     # Adjust yt_dlp options to prioritize MP4 with anti-bot measures
@@ -615,31 +677,13 @@ def download_video(link, video_folder, audio_folder, ffmpeg_path):
             # Only log to error_log.txt, don't print to console
             # Silent failure - will try next strategy
 
-            # Check if it's a photo post (unsupported URL with /photo/ in the resolved URL)
-            if "unsupported url" in error_msg and (
-                "/photo/" in str(e) or "photo" in str(e)
-            ):
-                try:
-                    download_photo_post_with_audio(
-                        link, video_folder, audio_folder, ffmpeg_path
-                    )
-                    download_success = True
-                    print("✅ Photo post audio extracted successfully!")
-                    break
-                except Exception as photo_error:
-                    TECHNICAL_LOGS.append(
-                        f"❌ Photo post extraction failed for {link}: {photo_error}"
-                    )
-                    # Continue to next strategy or fail
-                    pass
-
             # If it's a bot detection error, try next strategy immediately
             if any(
                 keyword in error_msg
                 for keyword in ["bot", "sign in", "cookies", "authentication"]
             ):
                 continue
-            # If it's an unsupported URL (not photo post), skip all strategies
+            # If it's an unsupported URL, skip all strategies
             elif "unsupported url" in error_msg:
                 raise e
             # For other errors, try next strategy
@@ -677,98 +721,106 @@ def display_ascii_logo():
 def ensure_megatools():
     """Download and setup megatools automatically if not available."""
     megatools_path = os.path.join(os.path.dirname(__file__), "megatools")
-    megatools_exe = os.path.join(megatools_path, "megatools-1.11.5.20250706-win64", "megatools.exe")
-    
+    megatools_exe = os.path.join(
+        megatools_path, "megatools-1.11.5.20250706-win64", "megatools.exe"
+    )
+
     if os.path.exists(megatools_exe):
         return megatools_exe
-    
+
     print("🔧 Setting up MEGA downloader tools...")
-    
+
     # Create megatools directory
     os.makedirs(megatools_path, exist_ok=True)
-    
+
     # Download megatools for Windows
     import zipfile
     import urllib.request
-    
+
     try:
         print("⬬ Downloading megatools...")
-        megatools_url = "https://xff.cz/megatools/builds/builds/megatools-1.11.5.20250706-win64.zip"
+        megatools_url = (
+            "https://xff.cz/megatools/builds/builds/megatools-1.11.5.20250706-win64.zip"
+        )
         zip_path = os.path.join(megatools_path, "megatools.zip")
-        
+
         urllib.request.urlretrieve(megatools_url, zip_path)
-        
+
         print("� Extracting megatools...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(megatools_path)
-        
+
         # Remove zip file
         os.remove(zip_path)
-        
+
         print("✅ Megatools setup complete!")
         return megatools_exe
-        
+
     except Exception as e:
         print(f"❌ Failed to setup megatools: {e}")
         return None
 
+
 def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
     """Download files from MEGA.nz using megatools - simple and reliable."""
     print(f"📥 Downloading MEGA file: {link}")
-    
+
     # Ensure megatools is available
     megatools_exe = ensure_megatools()
     if not megatools_exe:
         print("❌ Could not setup MEGA downloader tools.")
         return None
-        
+
     if not os.path.exists(megatools_exe):
         print(f"❌ Megatools executable not found: {megatools_exe}")
         return None
-    
+
     try:
         # Use megatools dl command to download the file
         print("⬬ Starting MEGA download with megatools...")
-        
+
         # Run megatools dl command
-        result = subprocess.run([
-            megatools_exe,
-            "dl",
-            "--path", video_folder,
-            link
-        ], capture_output=True, text=True, timeout=300)
-        
+        result = subprocess.run(
+            [megatools_exe, "dl", "--path", video_folder, link],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+
         if result.returncode == 0:
             print("✅ MEGA download completed successfully!")
-            
+
             # Find the downloaded file
             video_files = [
-                f for f in os.listdir(video_folder)
-                if os.path.isfile(os.path.join(video_folder, f)) and
-                f.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v'))
+                f
+                for f in os.listdir(video_folder)
+                if os.path.isfile(os.path.join(video_folder, f))
+                and f.lower().endswith(
+                    (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v")
+                )
             ]
-            
+
             if video_files:
                 # Get the most recently modified video file
                 latest_file = max(
                     [os.path.join(video_folder, f) for f in video_files],
-                    key=os.path.getmtime
+                    key=os.path.getmtime,
                 )
-                
+
                 print(f"📹 Downloaded file: {os.path.basename(latest_file)}")
-                
+
                 # Extract audio if it's a video file
                 extract_audio_to_mp3(latest_file, audio_folder, ffmpeg_path)
-                
+
                 return latest_file
             else:
                 print("⚠️ Video file not found after download")
                 return None
-                
+
         else:
             print(f"❌ MEGA download failed: {result.stderr}")
             return None
-            
+
     except subprocess.TimeoutExpired:
         print("❌ MEGA download timed out")
         return None
@@ -779,26 +831,93 @@ def download_mega_file(link, video_folder, audio_folder, ffmpeg_path):
 
 def download_photo_post_with_audio(link, video_folder, audio_folder, ffmpeg_path):
     """Download photo posts with audio using gallery-dl."""
-    print(f"📷 Photo post detected - using gallery-dl for audio extraction")
-
     if not GALLERY_DL_AVAILABLE:
         print("❌ Gallery-dl not available. Cannot download photo post audio.")
         raise RuntimeError("Gallery-dl library not available")
 
     try:
+        # Extract photo ID from URL for consistent naming
+        photo_id = None
+        try:
+            # Resolve shortened URLs first
+            if "vt.tiktok.com" in link or "vm.tiktok.com" in link:
+                response = requests.head(link, allow_redirects=True, timeout=10)
+                resolved_url = response.url
+            else:
+                resolved_url = link
+
+            # Extract ID from URL like: https://www.tiktok.com/@user/photo/7498443312253226258
+            if "/photo/" in resolved_url:
+                photo_id = resolved_url.split("/photo/")[1].split("?")[0].split("/")[0]
+        except:
+            photo_id = None
+
+        # Generate consistent filename
+        if photo_id:
+            audio_filename = sanitize_filename(f"tiktok_photo_{photo_id}.mp3")
+        else:
+            audio_filename = sanitize_filename(f"photo_post_audio_{int(time.time())}.mp3")
+
+        audio_path = os.path.join(audio_folder, audio_filename)
+
+        # CHECK IF ALREADY EXISTS - Skip download if it does
+        if os.path.exists(audio_path):
+            print(f"⏭️ Photo post audio already exists, skipping: {audio_filename}")
+            return  # Exit early - no download needed!
+
         # Create temporary directory for gallery-dl downloads
         temp_dir = os.path.join(video_folder, "temp_gallery")
         os.makedirs(temp_dir, exist_ok=True)
 
-        # Configure gallery-dl to download to temp directory
-        import json
-        import subprocess
-
-        # Use gallery-dl command line to download
-        cmd = ["gallery-dl", "--dest", temp_dir, "--write-metadata", link]
-
         print("⬬ Starting photo post download...")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        # Use gallery-dl directly via import (works in both .py and .exe)
+        # This prevents the infinite process spawning bug in PyInstaller
+        import gallery_dl.job
+        import gallery_dl.config
+
+        # Configure gallery-dl
+        gallery_dl.config.set(("extractor",), "base-directory", temp_dir)
+
+        # Capture output
+        from io import StringIO
+        import sys as sys_module
+        old_stdout = sys_module.stdout
+        old_stderr = sys_module.stderr
+        stdout_capture = StringIO()
+        stderr_capture = StringIO()
+
+        try:
+            sys_module.stdout = stdout_capture
+            sys_module.stderr = stderr_capture
+
+            # Run gallery-dl job
+            retcode = gallery_dl.job.DownloadJob(link).run()
+
+            # Restore stdout/stderr
+            sys_module.stdout = old_stdout
+            sys_module.stderr = old_stderr
+
+            stdout = stdout_capture.getvalue()
+            stderr = stderr_capture.getvalue()
+
+            result = type('obj', (object,), {
+                'returncode': retcode,
+                'stdout': stdout,
+                'stderr': stderr
+            })()
+
+        except Exception as e:
+            sys_module.stdout = old_stdout
+            sys_module.stderr = old_stderr
+            print(f"❌ Gallery-dl error: {e}")
+            raise RuntimeError(f"Photo post download failed: {e}")
+
+        # Show gallery-dl output for debugging
+        if result.stdout:
+            print(f"Gallery-dl output: {result.stdout[:200]}")
+        if result.stderr:
+            print(f"Gallery-dl errors: {result.stderr[:200]}")
 
         if result.returncode == 0:
             print("✅ Photo post downloaded successfully!")
@@ -818,12 +937,7 @@ def download_photo_post_with_audio(link, video_folder, audio_folder, ffmpeg_path
 
                 # Check for audio/video files
                 if file_ext in [".mp4", ".m4a", ".mp3", ".wav", ".aac"]:
-                    # Extract audio using ffmpeg
-                    audio_filename = sanitize_filename(
-                        f"photo_post_audio_{int(time.time())}.mp3"
-                    )
-                    audio_path = os.path.join(audio_folder, audio_filename)
-
+                    # Use the pre-determined filename (already set above)
                     print(f"🎵 Extracting audio from photo post...")
                     subprocess.run(
                         [
@@ -983,9 +1097,7 @@ def extract_missing_audio_files(video_folder, audio_folder, ffmpeg_path):
             extract_audio_to_mp3(file_path, audio_folder, ffmpeg_path)
             print(f"✅ Created: {mp3_filename}")
         except Exception as e:
-            TECHNICAL_LOGS.append(
-                f"❌ Failed to extract audio from {filename}: {e}"
-            )
+            TECHNICAL_LOGS.append(f"❌ Failed to extract audio from {filename}: {e}")
 
 
 def cleanup_misplaced_audio_files(video_folder, audio_folder, ffmpeg_path):
@@ -1033,53 +1145,52 @@ def detect_and_rename_mega_file(temp_filepath, file_id, output_folder):
     """Detect file type and rename MEGA download with proper extension."""
     try:
         print("🔍 Analyzing downloaded MEGA file...")
-        
+
         # First, try using FFmpeg to probe the file (works even on encrypted MEGA files sometimes)
         ffmpeg_path = get_ffmpeg_path()
         if ffmpeg_path:
             try:
-                probe_cmd = [
-                    ffmpeg_path, '-i', temp_filepath, '-f', 'null', '-'
-                ]
+                probe_cmd = [ffmpeg_path, "-i", temp_filepath, "-f", "null", "-"]
                 result = subprocess.run(
-                    probe_cmd, 
-                    capture_output=True, 
-                    text=True, 
-                    timeout=30
+                    probe_cmd, capture_output=True, text=True, timeout=30
                 )
-                
+
                 # Check FFmpeg output for format information
                 output_text = result.stderr.lower()
-                
-                if 'mp4' in output_text or 'h264' in output_text or 'aac' in output_text:
+
+                if (
+                    "mp4" in output_text
+                    or "h264" in output_text
+                    or "aac" in output_text
+                ):
                     file_extension = ".mp4"
-                elif 'matroska' in output_text or 'mkv' in output_text:
+                elif "matroska" in output_text or "mkv" in output_text:
                     file_extension = ".mkv"
-                elif 'avi' in output_text:
+                elif "avi" in output_text:
                     file_extension = ".avi"
-                elif 'quicktime' in output_text or 'mov' in output_text:
+                elif "quicktime" in output_text or "mov" in output_text:
                     file_extension = ".mov"
-                elif 'webm' in output_text:
+                elif "webm" in output_text:
                     file_extension = ".webm"
-                elif 'mp3' in output_text:
+                elif "mp3" in output_text:
                     file_extension = ".mp3"
                 else:
                     # If FFmpeg can't identify it, assume it's a video
                     file_extension = ".mp4"
-                    
+
                 print(f"📹 FFmpeg detected format: {file_extension}")
-                
+
             except Exception as e:
                 print(f"⚠️ FFmpeg probe failed: {e}")
                 file_extension = ".mp4"  # Default to MP4
         else:
             # No FFmpeg available, try basic file analysis
             print("⚠️ FFmpeg not available, using basic detection...")
-            
+
             # Read first few bytes to detect file type
-            with open(temp_filepath, 'rb') as f:
+            with open(temp_filepath, "rb") as f:
                 header = f.read(16)
-            
+
             # Check if it looks like an encrypted MEGA file (random bytes)
             # If so, assume it's a video and try .mp4
             if len(set(header)) > 8:  # High entropy suggests encryption
@@ -1087,28 +1198,30 @@ def detect_and_rename_mega_file(temp_filepath, file_id, output_folder):
                 print("🔐 File appears encrypted, assuming MP4")
             else:
                 # Try basic magic bytes detection
-                if header.startswith(b'\x00\x00\x00\x18ftypmp4') or header.startswith(b'\x00\x00\x00\x20ftypiso'):
+                if header.startswith(b"\x00\x00\x00\x18ftypmp4") or header.startswith(
+                    b"\x00\x00\x00\x20ftypiso"
+                ):
                     file_extension = ".mp4"
-                elif header.startswith(b'\x1a\x45\xdf\xa3'):  # Matroska/WebM
+                elif header.startswith(b"\x1a\x45\xdf\xa3"):  # Matroska/WebM
                     file_extension = ".mkv"
-                elif header.startswith(b'RIFF') and b'AVI ' in header:
+                elif header.startswith(b"RIFF") and b"AVI " in header:
                     file_extension = ".avi"
-                elif header.startswith(b'ID3') or header.startswith(b'\xff\xfb'):
+                elif header.startswith(b"ID3") or header.startswith(b"\xff\xfb"):
                     file_extension = ".mp3"
                 else:
                     file_extension = ".mp4"  # Default fallback
-        
+
         # Generate new filename with proper extension
         new_filename = f"mega_file_{file_id}{file_extension}"
         new_filepath = os.path.join(output_folder, new_filename)
-        
+
         # Rename the file
         os.rename(temp_filepath, new_filepath)
-        
+
         print(f"📁 Renamed to: {new_filename}")
-        
+
         return new_filepath
-        
+
     except Exception as e:
         print(f"⚠️ Could not detect file type: {e}")
         # If detection fails, try a generic video extension
@@ -1121,60 +1234,68 @@ def detect_and_rename_mega_file(temp_filepath, file_id, output_folder):
             # Last resort - keep original name
             return temp_filepath
 
+
 def decrypt_mega_file(encrypted_filepath, key_string, output_folder, file_id):
     """Decrypt MEGA file using the key from the URL."""
     try:
         print("🔓 Decrypting MEGA file...")
-        
+
         # Decode the base64 key
-        key_bytes = base64.urlsafe_b64decode(key_string + '==')  # Add padding
-        
+        key_bytes = base64.urlsafe_b64decode(key_string + "==")  # Add padding
+
         # MEGA uses the first 16 bytes as AES key
         aes_key = key_bytes[:16]
-        
+
         # Read encrypted file
-        with open(encrypted_filepath, 'rb') as f:
+        with open(encrypted_filepath, "rb") as f:
             encrypted_data = f.read()
-        
+
         # MEGA uses AES-128-CTR encryption
         # Initialize counter (MEGA uses a specific counter format)
         counter = Counter.new(128, initial_value=0)
         cipher = AES.new(aes_key, AES.MODE_CTR, counter=counter)
-        
+
         # Decrypt the data
         decrypted_data = cipher.decrypt(encrypted_data)
-        
+
         # Save decrypted file temporarily
         temp_decrypted = os.path.join(output_folder, f"decrypted_temp_{file_id}.tmp")
-        with open(temp_decrypted, 'wb') as f:
+        with open(temp_decrypted, "wb") as f:
             f.write(decrypted_data)
-        
+
         print("✅ File decrypted successfully!")
         return temp_decrypted
-        
+
     except Exception as e:
         print(f"❌ Decryption failed: {e}")
         return None
+
 
 # Alternative MEGA download methods that ACTUALLY WORK
 def download_mega_with_megadl():
     """Try to download using megadl command line tool."""
     try:
-        result = subprocess.run(['megadl', '--version'], capture_output=True, text=True)
+        result = subprocess.run(["megadl", "--version"], capture_output=True, text=True)
         return True
     except FileNotFoundError:
         return False
 
+
 def download_mega_with_megatools():
     """Try to download using megatools."""
     try:
-        result = subprocess.run(['megaget', '--version'], capture_output=True, text=True)
+        result = subprocess.run(
+            ["megaget", "--version"], capture_output=True, text=True
+        )
         return True
     except FileNotFoundError:
         return False
 
 
 if __name__ == "__main__":
+    # CRITICAL: Prevent PyInstaller from spawning infinite processes
+    multiprocessing.freeze_support()
+
     print("    __    ____  _____________  __")
     print("   / /   / __ \\/ ____/ ____/ |/ /")
     print("  / /   / /_/ / / __/ __/  |   /")
@@ -1182,7 +1303,7 @@ if __name__ == "__main__":
     print("/_____/_/ |_|\\____/_____//_/|_|")
     print("Video links downloader - v4.0")
     print("============================================================")
-    
+
     links_file = "links.txt"
     if not os.path.exists(links_file):
         example_file = "links.txt.example"
@@ -1199,7 +1320,9 @@ if __name__ == "__main__":
                 f.write("# https://www.youtube.com/watch?v=example123\n")
                 f.write("# https://www.tiktok.com/@user/video/1234567890\n")
                 f.write("# https://mega.nz/file/example#key\n")
-            print(f"📝 Created '{links_file}' - Please add your video links and run again.")
+            print(
+                f"📝 Created '{links_file}' - Please add your video links and run again."
+            )
             print("\n" + "=" * 60)
             print("⚠️  FIRST RUN SETUP COMPLETE")
             print("=" * 60)
@@ -1220,7 +1343,7 @@ if __name__ == "__main__":
         print("Check error_log.txt for details.")
     finally:
         # Prevent window from closing immediately when run as EXE
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("✅ Program finished!")
-        print("="*60)
+        print("=" * 60)
         input("\nPress ENTER to close this window...")
